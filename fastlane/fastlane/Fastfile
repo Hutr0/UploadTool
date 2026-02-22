@@ -1,0 +1,272 @@
+default_platform(:ios)
+
+def uploadtool_project_root
+  root = ENV["UPLOADTOOL_PROJECT_ROOT"].to_s.strip
+  return root if root != ""
+
+  dir = Dir.pwd
+  15.times do
+    return dir if File.exist?(File.join(dir, "pubspec.yaml"))
+    parent = File.expand_path("..", dir)
+    break if parent == dir
+    dir = parent
+  end
+
+  ""
+end
+
+def uploadtool_config_dir(repo_root)
+  dir = ENV["UPLOADTOOL_CONFIG_DIR"].to_s.strip
+  return dir if dir != ""
+
+  candidate = File.join(repo_root, ".uploadtool")
+  return candidate if Dir.exist?(candidate)
+
+  candidate = File.join(repo_root, "UploadTool", "config")
+  return candidate if Dir.exist?(candidate)
+
+  ""
+end
+
+platform :ios do
+  desc "Build Flutter IPA and upload to TestFlight (API key or Apple ID)"
+  lane :upload_testflight do |options|
+    repo_root = uploadtool_project_root
+    UI.user_error!("UPLOADTOOL_PROJECT_ROOT is not set and project root could not be auto-detected (pubspec.yaml not found).") if repo_root == ""
+
+    ipa_path = options[:ipa]
+    if ipa_path.to_s.strip != "" && !ipa_path.to_s.start_with?("/")
+      ipa_path = File.expand_path(ipa_path.to_s, repo_root)
+    end
+
+    if ENV["SKIP_FLUTTER_BUILD"].to_s.strip != "1"
+      Dir.chdir(repo_root) do
+        safe_prefix = "/usr/bin:/bin:/usr/sbin:/sbin"
+        ENV["PATH"] = "#{safe_prefix}:#{ENV["PATH"]}" unless ENV["PATH"].to_s.start_with?(safe_prefix)
+
+        sh("flutter pub get")
+
+        build_args = ["flutter", "build", "ipa", "--release"]
+        dart_define_file = ENV["DART_DEFINE_FILE"].to_s.strip
+        if dart_define_file == ""
+          config_dir = uploadtool_config_dir(repo_root)
+          dart_define_file = File.join(config_dir, "env.json") if config_dir != ""
+        end
+        if dart_define_file != "" && File.exist?(dart_define_file)
+          build_args += ["--dart-define-from-file", dart_define_file]
+        end
+        build_args += ["--build-name", ENV["BUILD_NAME"]] if ENV["BUILD_NAME"].to_s.strip != ""
+        build_args += ["--build-number", ENV["BUILD_NUMBER"]] if ENV["BUILD_NUMBER"].to_s.strip != ""
+        sh(build_args.join(" "))
+      end
+    end
+
+    if ipa_path.to_s.strip == ""
+      candidates = Dir[File.join(repo_root, "build/ios/ipa/*.ipa")]
+      UI.user_error!("No IPA found at build/ios/ipa/*.ipa") if candidates.empty?
+      ipa_path = candidates.max_by { |p| File.mtime(p) }
+    end
+
+    if ENV["BUILD_ONLY"].to_s.strip == "1"
+      UI.success("BUILD_ONLY=1, skipping TestFlight upload. IPA: #{ipa_path}")
+      next
+    end
+
+    use_api_key = %w[ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_PATH].all? { |k| ENV[k].to_s.strip != "" }
+
+    wait_for_processing = ENV["WAIT_FOR_BUILD_PROCESSING"].to_s.strip == "1"
+    changelog = ENV["TESTFLIGHT_CHANGELOG"].to_s
+
+    app_identifier = ENV["IOS_APP_IDENTIFIER"].to_s.strip
+    app_identifier = ENV["APP_IDENTIFIER"].to_s.strip if app_identifier == ""
+    app_identifier = "lifestyle.shopping.choys" if app_identifier == ""
+
+    upload_args = {
+      ipa: ipa_path,
+      app_identifier: app_identifier,
+      skip_waiting_for_build_processing: !wait_for_processing
+    }
+
+    upload_args[:changelog] = changelog unless changelog.strip == ""
+
+    if use_api_key
+      api_key = app_store_connect_api_key(
+        key_id: ENV.fetch("ASC_KEY_ID"),
+        issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+        key_filepath: ENV.fetch("ASC_KEY_PATH"),
+        duration: 1200,
+        in_house: false
+      )
+      upload_args[:api_key] = api_key
+    else
+      username = ENV["FASTLANE_USER"].to_s.strip
+      UI.user_error!("Missing credentials. Set ASC_* (API key) or FASTLANE_USER + FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD (Apple ID).") if username == ""
+      upload_args[:username] = username
+
+      team_id = (ENV["FASTLANE_TEAM_ID"].to_s.strip != "" ? ENV["FASTLANE_TEAM_ID"].to_s.strip : ENV["FASTLANE_ITC_TEAM_ID"].to_s.strip)
+      upload_args[:team_id] = team_id if team_id != ""
+
+      team_name = (ENV["FASTLANE_TEAM_NAME"].to_s.strip != "" ? ENV["FASTLANE_TEAM_NAME"].to_s.strip : ENV["FASTLANE_ITC_TEAM_NAME"].to_s.strip)
+      upload_args[:team_name] = team_name if team_name != ""
+    end
+
+    upload_to_testflight(**upload_args)
+  end
+end
+
+platform :android do
+  desc "Build Android AAB and upload to Google Play (supply)"
+  lane :upload_play do |options|
+    repo_root = uploadtool_project_root
+    UI.user_error!("UPLOADTOOL_PROJECT_ROOT is not set and project root could not be auto-detected (pubspec.yaml not found).") if repo_root == ""
+
+    aab_path = options[:aab]
+    if aab_path.to_s.strip != "" && !aab_path.to_s.start_with?("/")
+      aab_path = File.expand_path(aab_path.to_s, repo_root)
+    end
+
+    package_name = ENV["ANDROID_PACKAGE_NAME"].to_s.strip
+    package_name = "lifestyle.shopping.choys" if package_name == ""
+
+    json_key_path = ENV["PLAY_JSON_KEY_PATH"].to_s.strip
+    json_key_path = ENV["SUPPLY_JSON_KEY"].to_s.strip if json_key_path == ""
+    UI.user_error!("Missing Google Play credentials. Set PLAY_JSON_KEY_PATH (or SUPPLY_JSON_KEY).") if json_key_path == ""
+
+    track = ENV["PLAY_TRACK"].to_s.strip
+    track = ENV["SUPPLY_TRACK"].to_s.strip if track == ""
+    track = "internal" if track == ""
+
+    release_status = ENV["PLAY_RELEASE_STATUS"].to_s.strip
+    release_status = ENV["SUPPLY_RELEASE_STATUS"].to_s.strip if release_status == ""
+    release_status = "completed" if release_status == ""
+
+    release_notes = ENV["PLAY_RELEASE_NOTES"].to_s
+    release_notes = ENV["RELEASE_NOTES"].to_s if release_notes.strip == ""
+
+    supply_version_name = ENV["SUPPLY_VERSION_NAME"].to_s.strip
+    supply_version_name = ENV["PLAY_RELEASE_NAME"].to_s.strip if supply_version_name == ""
+    if supply_version_name == ""
+      bn = ENV["BUILD_NAME"].to_s.strip
+      bnum = ENV["BUILD_NUMBER"].to_s.strip
+      build_type = ENV["BUILD_TYPE"].to_s.strip
+      build_type = "" unless %w[dev prod].include?(build_type)
+      if bn != "" && bnum != ""
+        supply_version_name = "#{bn} | #{bnum}"
+        supply_version_name += " | #{build_type}" if build_type != ""
+      elsif bn != ""
+        supply_version_name = bn
+      end
+    end
+
+    raw_build_number = ENV["ANDROID_BUILD_NUMBER"].to_s.strip
+    raw_build_number = ENV["BUILD_NUMBER"].to_s.strip if raw_build_number == ""
+
+    if raw_build_number.match?(/^\d{8}\.\d+\.\d+$/)
+      parts = raw_build_number.split(".")
+      raw_build_number = "#{parts[0]}.#{parts[1]}"
+    end
+
+    if raw_build_number == ""
+      pubspec_path = File.join(repo_root, "pubspec.yaml")
+      if File.exist?(pubspec_path)
+        version_line = File.readlines(pubspec_path, chomp: true).find { |l| l.strip.start_with?("version:") }
+        if version_line
+          version_value = version_line.split("version:", 2).last.to_s.strip
+          raw_build_number = version_value.split("+", 2).last.to_s.strip if version_value.include?("+")
+        end
+      end
+    end
+
+    if raw_build_number.match?(/^\d{8}\.\d+\.\d+$/)
+      parts = raw_build_number.split(".")
+      raw_build_number = "#{parts[0]}.#{parts[1]}"
+    end
+
+    if raw_build_number.match?(/^(\d{8})\.(\d+)$/)
+      date_part = Regexp.last_match(1).to_i
+      n_part = Regexp.last_match(2).to_i
+      android_build_number = (date_part * 100 + n_part).to_s
+    else
+      android_build_number = raw_build_number.gsub(/[^0-9]/, "")
+    end
+
+    if android_build_number == "" || !android_build_number.match?(/^\d+$/)
+      UI.user_error!("ANDROID_BUILD_NUMBER must be an integer (Android versionCode). Set ANDROID_BUILD_NUMBER/BUILD_NUMBER or pubspec.yaml version build number.")
+    end
+
+    if android_build_number.to_i <= 0 || android_build_number.to_i >= 2_147_483_647
+      UI.user_error!("ANDROID_BUILD_NUMBER is out of range for Android versionCode: #{android_build_number}")
+    end
+
+    if ENV["SKIP_FLUTTER_BUILD"].to_s.strip != "1"
+      Dir.chdir(repo_root) do
+        sh("flutter pub get")
+
+        build_args = ["flutter", "build", "appbundle", "--release"]
+        dart_define_file = ENV["DART_DEFINE_FILE"].to_s.strip
+        if dart_define_file == ""
+          config_dir = uploadtool_config_dir(repo_root)
+          dart_define_file = File.join(config_dir, "env.json") if config_dir != ""
+        end
+        if dart_define_file != "" && File.exist?(dart_define_file)
+          build_args += ["--dart-define-from-file", dart_define_file]
+        end
+        build_args += ["--build-name", ENV["BUILD_NAME"]] if ENV["BUILD_NAME"].to_s.strip != ""
+        build_args += ["--build-number", android_build_number]
+        sh(build_args.join(" "))
+      end
+    end
+
+    if aab_path.to_s.strip == ""
+      candidates = Dir[File.join(repo_root, "build/app/outputs/bundle/release/*.aab")]
+      UI.user_error!("No AAB found at build/app/outputs/bundle/release/*.aab") if candidates.empty?
+      aab_path = candidates.max_by { |p| File.mtime(p) }
+    end
+
+    if ENV["BUILD_ONLY"].to_s.strip == "1"
+      UI.success("BUILD_ONLY=1, skipping Google Play upload. AAB: #{aab_path}")
+      next
+    end
+
+    if release_notes.strip != ""
+      require "tmpdir"
+      require "fileutils"
+      Dir.mktmpdir("supply-metadata") do |dir|
+        locale = (ENV["PLAY_LOCALE"].to_s.strip != "" ? ENV["PLAY_LOCALE"].to_s.strip : "en-US")
+        changelog_dir = File.join(dir, "android", locale, "changelogs")
+        FileUtils.mkdir_p(changelog_dir)
+        File.write(File.join(changelog_dir, "#{android_build_number}.txt"), release_notes)
+
+        upload_to_play_store(
+          json_key: json_key_path,
+          package_name: package_name,
+          aab: aab_path,
+          version_name: supply_version_name,
+          version_code: android_build_number,
+          track: track,
+          release_status: release_status,
+          metadata_path: File.join(dir, "android"),
+          skip_upload_metadata: true,
+          skip_upload_images: true,
+          skip_upload_screenshots: true,
+          skip_upload_changelogs: false
+        )
+      end
+      next
+    end
+
+    upload_to_play_store(
+      json_key: json_key_path,
+      package_name: package_name,
+      aab: aab_path,
+      version_name: supply_version_name,
+      version_code: android_build_number,
+      track: track,
+      release_status: release_status,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: true
+    )
+  end
+end

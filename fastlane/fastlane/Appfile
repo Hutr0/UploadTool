@@ -1,0 +1,10 @@
+app_identifier(ENV["IOS_APP_IDENTIFIER"].to_s.strip != "" ? ENV["IOS_APP_IDENTIFIER"].to_s.strip : "lifestyle.shopping.choys")
+
+tid = ENV["IOS_TEAM_ID"].to_s.strip
+if tid == ""
+  tid = ENV["FASTLANE_TEAM_ID"].to_s.strip
+end
+if tid == ""
+  tid = "LSBS69V2G7"
+end
+team_id(tid) if tid != ""

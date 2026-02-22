@@ -1,0 +1,24 @@
+# Local configs (do not commit)
+config/*.env
+config/env.json
+ 
+# Secrets / keys
+**/AuthKey_*.p8
+ 
+# Runtime artifacts
+logs/
+state/
+_tmp/
+ 
+# Bundler / Ruby (fastlane is internal)
+fastlane/.bundle/
+fastlane/vendor/bundle/
+ 
+# Fastlane outputs (typical)
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
+
+# Other
+.DS_Store
