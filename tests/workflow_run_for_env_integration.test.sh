@@ -80,8 +80,8 @@ uploadtool_build_and_upload_for_env() {
   env_path="${UPLOAD_STATE_DIR}/dev/dart_defines.json"
   assert_file_exists "$env_path" "dart_defines.json должен быть создан" || exit 1
 
-  got_env="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("CHOYS_ENV",""))' "$env_path" 2>/dev/null || true)"
-  check assert_eq "dev" "$got_env" "CHOYS_ENV должен записаться в dart_defines.json"
+  got_env="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("APP_ENV",""))' "$env_path" 2>/dev/null || true)"
+  check assert_eq "dev" "$got_env" "APP_ENV должен записаться в dart_defines.json"
 
   # should compute ANDROID_BUILD_NUMBER
   check assert_eq "2026022110" "${ANDROID_BUILD_NUMBER:-}" "ANDROID_BUILD_NUMBER должен считаться как date*100+N"

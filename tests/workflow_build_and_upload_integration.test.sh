@@ -93,7 +93,7 @@ uploadtool_run_cmd_override() {
 
   state_dir="${UPLOAD_STATE_DIR}/dev"
   mkdir -p "$state_dir"
-  printf '{"CHOYS_ENV":"dev"}\n' > "${state_dir}/dart_defines.json"
+  printf '{"APP_ENV":"dev"}\n' > "${state_dir}/dart_defines.json"
 
   UPLOAD_STATUS_FILES=()
   UPLOAD_LABELS=()

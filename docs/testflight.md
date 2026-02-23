@@ -18,6 +18,19 @@ UploadTool читает настройки из **одного** файла: `re
 
 ```bash
 mkdir -p .uploadtool
+cp /path/to/UploadTool/config/release.env.example .uploadtool/release.env
+```
+
+Альтернатива (автоматически создаст `.uploadtool/` и разложит шаблоны):
+
+```bash
+bash /path/to/UploadTool/run.sh init --project-root /path/to/flutter_project
+```
+
+Если UploadTool подключён как папка `./UploadTool` внутри проекта, можно так:
+
+```bash
+mkdir -p .uploadtool
 cp UploadTool/config/release.env.example .uploadtool/release.env
 ```
 
@@ -63,17 +76,21 @@ bash /path/to/UploadTool/run.sh --project-root /path/to/flutter_project --config
 
 Окружение приложения задаётся через `env.json` в директории конфигов (например `.uploadtool/env.json`) и прокидывается в Flutter как dart-define:
 
-- `CHOYS_ENV`: `dev` или `prod`
-- `CHOYS_BASE_URL`: опционально (если задано — **перебивает** `CHOYS_ENV`)
+- `APP_ENV`: `dev` или `prod`
+- `BASE_URL`: опционально (если твоё приложение умеет его читать)
+
+По умолчанию UploadTool обновляет `APP_ENV`. Если в твоём проекте уже используется другой ключ — можно задать:
+
+- `UPLOADTOOL_ENV_JSON_ENV_KEY=...`
 
 Если файла ещё нет, можно создать из примера:
 
 ```bash
 mkdir -p .uploadtool
-cp UploadTool/config/env.json.example .uploadtool/env.json
+cp /path/to/UploadTool/config/env.json.example .uploadtool/env.json
 ```
 
-Самый простой путь — запускать `Upload` / `UploadTool/run.sh`: мастер спросит окружение и сам обновит `env.json` в директории конфигов перед сборкой.
+Самый простой путь — запускать wizard (`run.sh`): мастер спросит окружение и сам обновит `env.json` в директории конфигов перед сборкой.
 
 Если выбрано `dev + prod`, wizard выполнит две публикации подряд:
 
@@ -118,15 +135,15 @@ cp UploadTool/config/env.json.example .uploadtool/env.json
 
 ### Что именно запускается
 
-`UploadTool/run.sh ios`:
+`run.sh ios` (или `./UploadTool/run.sh ios`, если подключено как папка в проекте):
 
-- загружает env‑переменные из `release.env` (по умолчанию из `--config-dir` / `.uploadtool` / `UploadTool/config`)
-- делает `bundle install` в `UPLOADTOOL_FASTLANE_ROOT` (по умолчанию это `UploadTool/fastlane`)
+- загружает env‑переменные из `release.env` (по умолчанию из `--config-dir` / `.uploadtool` / `config/` рядом с `run.sh`)
+- делает `bundle install` в `UPLOADTOOL_FASTLANE_ROOT` (по умолчанию это `fastlane/` рядом с `run.sh`)
 - запускает lane `ios upload_testflight`
 
 Fastlane‑логика:
 
-- лежит в `UploadTool/fastlane/fastlane/Fastfile`
+- лежит в `fastlane/fastlane/Fastfile`
 - выполняет `flutter pub get`
 - выполняет `flutter build ipa --release` (если не задан `SKIP_FLUTTER_BUILD=1`)
 - загружает `build/ios/ipa/*.ipa` в TestFlight
@@ -148,7 +165,7 @@ Fastlane‑логика:
 
 В Xcode export pipeline может вызвать `/usr/bin/rsync`, но “server” rsync подтянуть через `PATH`. Если первым в `PATH` стоит Homebrew rsync — export ломается.
 
-`UploadTool/run.sh` уже принудительно ставит системные пути первыми в `PATH`. Если делаешь вручную:
+Wizard (`run.sh`) уже принудительно ставит системные пути первыми в `PATH`. Если делаешь вручную:
 
 ```bash
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH"

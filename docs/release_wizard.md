@@ -11,7 +11,11 @@
 
 ### Точки входа
 
-- `./Upload` — «как в этом проекте принято» (обёртка над UploadTool)
+- `./run.sh` — запуск мастера из репозитория UploadTool
+- `./run.sh ios|android|both` — запуск с предвыбранной платформой
+
+Если UploadTool подключён как папка `./UploadTool` внутри Flutter‑проекта:
+
 - `./UploadTool/run.sh` — запуск мастера напрямую
 - `./UploadTool/run.sh ios|android|both` — запуск с предвыбранной платформой
 
@@ -37,24 +41,35 @@ UploadTool выбирает конфиг‑директорию так:
 
 - если передан `--config-dir` (или задан `UPLOADTOOL_CONFIG_DIR`) — берёт её
 - иначе, если есть `${PROJECT}/.uploadtool` — берёт её
-- иначе — использует `UploadTool/config`
+- иначе — использует `config/` рядом с `run.sh` (или `./UploadTool/config`, если UploadTool подключён как папка внутри проекта)
+
+Чтобы автоматически создать `.uploadtool/` и разложить туда шаблоны конфигов, можно использовать:
+
+- `./run.sh init --project-root /path/to/flutter_project`
+
+Если хочется запускать UploadTool без постоянной передачи `--project-root/--config-dir`, можно сохранить дефолты:
+
+- `./run.sh init --project-root /path/to/flutter_project --save-defaults`
+
+Формат файла дефолтов: `config/cli.env.example`.
 
 ### 1) Окружение приложения (dev/prod) — `env.json`
 
 `env.json` — это dart‑defines, которые попадут в Flutter сборку через `--dart-define-from-file`.
 
-Поддерживаемые ключи:
+Поддерживаемые ключи (пример для универсального использования):
 
-- `CHOYS_ENV`: `dev` или `prod`
-- `CHOYS_BASE_URL`: опционально. Если задан (не пустой) — **перебивает** `CHOYS_ENV`.
+- `APP_ENV`: `dev` или `prod`
+- `BASE_URL`: опционально (если твоё приложение умеет его читать)
 
-Приоритет (как в приложении, так и в iOS ShareExtension):
-
-1) `CHOYS_BASE_URL` / `config.baseUrl`
-2) `CHOYS_ENV` / `config.env`
-3) если ничего не задано — **prod**
+Важно: UploadTool **не навязывает** твоему приложению конкретные ключи. По умолчанию мастер пишет ключ `APP_ENV`.
 
 Мастер перед сборкой **сам обновляет** `env.json` в директории конфигов (например, `.uploadtool/env.json`).
+
+Если тебе нужна совместимость с существующим проектом:
+
+- если файл уже содержит `CHOYS_ENV` (и не содержит `APP_ENV`) — UploadTool продолжит обновлять именно `CHOYS_ENV`
+- можно явно задать ключ через `UPLOADTOOL_ENV_JSON_ENV_KEY` (например, `UPLOADTOOL_ENV_JSON_ENV_KEY=MY_ENV`)
 
 Если выбираешь `dev + prod`, мастер делает две публикации подряд:
 
@@ -62,7 +77,7 @@ UploadTool выбирает конфиг‑директорию так:
 - dev публикуется как `YYYYMMDD.N.0` (пример: `20260220.1.0`)
 - prod — ядро `YYYYMMDD.N` на 1 больше + `.1` (пример: dev `20260220.1.0` → prod `20260220.2.1`)
 
-Важно про iOS ShareExtension: он берёт baseUrl из App Group (значения `config.env` / `config.baseUrl`), которые приложение записывает при старте. Поэтому после смены окружения рекомендуется **один раз запустить приложение**, чтобы extension точно подхватил актуальный baseUrl.
+
 
 ### 2) Креды и настройки сборки/публикации — `release.env`
 
@@ -74,7 +89,7 @@ UploadTool выбирает конфиг‑директорию так:
 
 Пример со всеми опциями:
 
-- `UploadTool/config/release.env.example`
+- `config/release.env.example`
 
 ### 3) Поведение мастера (опционально) — `wizard.env`
 
@@ -85,7 +100,7 @@ UploadTool выбирает конфиг‑директорию так:
 
 Пример:
 
-- `UploadTool/config/wizard.env.example`
+- `config/wizard.env.example`
 
 ### Запуск из IDE (VSCode/Android Studio)
 
@@ -96,15 +111,15 @@ UploadTool выбирает конфиг‑директорию так:
 Где `PATH_TO_ENV_JSON` — это файл `env.json` из твоей директории конфигов:
 
 - если ты используешь рекомендованный вариант — это обычно `.uploadtool/env.json`
-- если ты используешь дефолт (когда UploadTool лежит внутри проекта) — это может быть `UploadTool/config/env.json`
+- если ты используешь дефолт (без `.uploadtool`) — это может быть `./UploadTool/config/env.json` (если UploadTool внутри проекта) или `/path/to/UploadTool/config/env.json` (если он отдельно)
 
 ### Fastlane (встроенный)
 
 Fastlane‑конфигурация теперь живёт внутри UploadTool:
 
-- `UploadTool/fastlane/Gemfile`
-- `UploadTool/fastlane/fastlane/Fastfile`
-- `UploadTool/fastlane/fastlane/Appfile`
+- `fastlane/Gemfile`
+- `fastlane/fastlane/Fastfile`
+- `fastlane/fastlane/Appfile`
 
 По умолчанию мастер делает `bundle install` именно там. При необходимости можно переопределить:
 
@@ -112,6 +127,6 @@ Fastlane‑конфигурация теперь живёт внутри UploadT
 
 ### Документация по платформам
 
-- iOS TestFlight: `UploadTool/docs/testflight.md`
-- Android Google Play: `UploadTool/docs/google_play.md`
+- iOS TestFlight: `docs/testflight.md`
+- Android Google Play: `docs/google_play.md`
 

@@ -32,7 +32,7 @@ PY
   if [[ -n "${BUILD_NAME:-}" ]]; then cmd+=(--build-name "$BUILD_NAME"); fi
   {
     echo "=== Окружение сборки (проверка dev/prod) ==="
-    echo "CHOYS_ENV=$tag"
+    echo "${UPLOADTOOL_ENV_JSON_ENV_KEY:-APP_ENV}=$tag"
     echo "dart_defines_file=$env_file"
     cat "$env_file" 2>/dev/null || true
     echo "=== Flutter build ==="
@@ -85,7 +85,7 @@ PY
   if [[ -n "${BUILD_NUMBER:-}" ]]; then cmd+=(--build-number "$BUILD_NUMBER"); fi
   {
     echo "=== Окружение сборки (проверка dev/prod) ==="
-    echo "CHOYS_ENV=$tag"
+    echo "${UPLOADTOOL_ENV_JSON_ENV_KEY:-APP_ENV}=$tag"
     echo "dart_defines_file=$env_file"
     cat "$env_file" 2>/dev/null || true
     echo "=== Flutter build ==="
@@ -154,7 +154,7 @@ uploadtool_run_for_env() {
 
   mkdir -p "$state_dir"
   uploadtool_write_env_to_file "${state_dir}/dart_defines.json" "$env"
-  echo "   📌 Окружение для сборок: CHOYS_ENV=$env, файл: ${state_dir}/dart_defines.json"
+  echo "   📌 Окружение для сборок: ${UPLOADTOOL_ENV_JSON_ENV_KEY:-APP_ENV}=$env, файл: ${state_dir}/dart_defines.json"
   if [[ -f "${state_dir}/dart_defines.json" ]]; then
     echo "      Содержимое: $(cat "${state_dir}/dart_defines.json" | tr -d '\n')"
   fi

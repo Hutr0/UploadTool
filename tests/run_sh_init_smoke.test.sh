@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-TEST_DESCRIPTION="Smoke: полный прогон run.sh в фейковом репо с моками команд"
+TEST_DESCRIPTION="Smoke: init/setup + запуск через cli.env (дефолтный проект/config-dir)"
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPLOAD_TOOL_DIR="$(cd "${TEST_DIR}/.." && pwd)"
@@ -22,38 +22,44 @@ assert_file_exists() {
   fi
 }
 
+assert_dir_exists() {
+  local path="$1"
+  local msg="${2:-}"
+  if [[ ! -d "$path" ]]; then
+    echo "Missing dir: $path" >&2
+    [[ -n "$msg" ]] && echo "$msg" >&2
+    return 1
+  fi
+}
+
 _tmp="$(mktemp -d)"
 
-# Minimal fake repo in temp
+# Copy tool into temp to avoid relying on local working tree state
 cp -R "${UPLOAD_TOOL_DIR}" "${_tmp}/UploadTool"
 
-# Provide embedded fastlane config (Gemfile) for bundle install step
-mkdir -p "${_tmp}/UploadTool/fastlane"
-printf "source 'https://rubygems.org'\n" > "${_tmp}/UploadTool/fastlane/Gemfile"
-
-# В рабочем репо эти файлы могут существовать локально (они gitignored) и ломать тест,
-# переопределяя переменные окружения. Для smoke-теста они не нужны.
-rm -f "${_tmp}/UploadTool/config/wizard.env" || true
-rm -f "${_tmp}/UploadTool/config/release.env" || true
-rm -f "${_tmp}/UploadTool/config/env.json" || true
-
-cat > "${_tmp}/pubspec.yaml" <<'YAML'
+# Fake Flutter project
+project_dir="${_tmp}/project"
+mkdir -p "$project_dir"
+cat > "${project_dir}/pubspec.yaml" <<'YAML'
 name: dummy
 version: 1.2.3+1
 YAML
 
-cat > "${_tmp}/release.env" <<'ENV'
-# empty on purpose for smoke test
-ENV
+cli_env="${_tmp}/cli.env"
 
-# Создаём дефолтный проектный конфиг-dir. После изменения логики run.sh
-# дефолтный UPLOAD_CONFIG_DIR — <project>/.uploadtool.
-mkdir -p "${_tmp}/.uploadtool"
-cp "${_tmp}/release.env" "${_tmp}/.uploadtool/release.env"
-cp "${_tmp}/UploadTool/config/wizard.env.example" "${_tmp}/.uploadtool/wizard.env"
-cp "${_tmp}/UploadTool/config/env.json.example" "${_tmp}/.uploadtool/env.json"
+# init should create .uploadtool and template files
+(
+  cd "${_tmp}/UploadTool"
+  bash "${_tmp}/UploadTool/run.sh" init --project-root "$project_dir" --cli-env-file "$cli_env" --save-defaults
+) || _failed=1
 
-# Stub external tools
+assert_dir_exists "${project_dir}/.uploadtool" ".uploadtool должен быть создан" || _failed=1
+assert_file_exists "${project_dir}/.uploadtool/env.json" "env.json должен быть создан" || _failed=1
+assert_file_exists "${project_dir}/.uploadtool/release.env" "release.env должен быть создан" || _failed=1
+assert_file_exists "${project_dir}/.uploadtool/wizard.env" "wizard.env должен быть создан" || _failed=1
+assert_file_exists "$cli_env" "cli.env должен быть создан" || _failed=1
+
+# Stub external tools for wizard run
 stub_bin="${_tmp}/stub_bin"
 mkdir -p "$stub_bin"
 
@@ -90,16 +96,18 @@ chmod +x "${stub_bin}/flutter"
 cat > "${stub_bin}/bundle" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-# bundle install / bundle exec are no-ops in smoke test
 exit 0
 SH
 chmod +x "${stub_bin}/bundle"
 
-# Run wizard non-interactively (skip most prompts; provide empty inputs for remaining ones)
+# Provide embedded fastlane config (Gemfile) for bundle install step
+mkdir -p "${_tmp}/UploadTool/fastlane"
+printf "source 'https://rubygems.org'\n" > "${_tmp}/UploadTool/fastlane/Gemfile"
+
+# Run wizard using defaults from cli.env (no --project-root/--config-dir)
 (
   export PATH="${stub_bin}:$PATH"
   export UPLOADTOOL_TODAY_YYYYMMDD="20260221"
-
   export UPLOADTOOL_SKIP_SAFE_PATH="1"
 
   export WIZARD_SKIP_TARGETS="1"
@@ -120,15 +128,14 @@ chmod +x "${stub_bin}/bundle"
   export UPLOADTOOL_FASTLANE_ROOT="${_tmp}/UploadTool/fastlane"
 
   cd "${_tmp}"
-  printf '\n%.0s' {1..30} | bash "${_tmp}/UploadTool/run.sh" --env-file "${_tmp}/.uploadtool/release.env"
+  printf '\n%.0s' {1..30} | bash "${_tmp}/UploadTool/run.sh" --cli-env-file "$cli_env" --env-file "${project_dir}/.uploadtool/release.env"
 )
 rc=$?
 if [[ "$rc" -ne 0 ]]; then
-  echo "run.sh smoke failed rc=$rc" >&2
+  echo "run.sh wizard via cli.env failed rc=$rc" >&2
   _failed=1
 else
-  # Validate artifacts produced
-  state_dir="${_tmp}/.uploadtool/state/dev"
+  state_dir="${project_dir}/.uploadtool/state/dev"
   assert_file_exists "${state_dir}/android_aab_path.txt" || _failed=1
   assert_file_exists "${state_dir}/ios_ipa_path.txt" || _failed=1
   aab_path="$(cat "${state_dir}/android_aab_path.txt" | tr -d '\r\n')"

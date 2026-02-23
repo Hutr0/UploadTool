@@ -139,7 +139,7 @@ test_description_of_file() {
       echo "Infra time: мок sleep/ожиданий"
       ;;
     env_json.test.sh)
-      echo "env.json: запись CHOYS_ENV и сохранение остальных ключей"
+      echo "env.json: запись APP_ENV и сохранение остальных ключей"
       ;;
     config.test.sh)
       echo "Конфиги: выбор и загрузка release.env/wizard.env (регрессия)"
