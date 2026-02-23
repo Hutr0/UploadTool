@@ -74,7 +74,7 @@ bash /path/to/UploadTool/run.sh --project-root /path/to/flutter_project --config
 
 ### Выбор окружения (dev/prod) — через JSON
 
-Окружение приложения задаётся через `env.json` в директории конфигов (например `.uploadtool/env.json`) и прокидывается в Flutter как dart-define:
+Окружение приложения задаётся через `env.json` в директории конфигов (например `.uploadtool/env.json`).
 
 - `APP_ENV`: `dev` или `prod`
 - `BASE_URL`: опционально (если твоё приложение умеет его читать)
@@ -90,7 +90,18 @@ mkdir -p .uploadtool
 cp /path/to/UploadTool/config/env.json.example .uploadtool/env.json
 ```
 
-Самый простой путь — запускать wizard (`run.sh`): мастер спросит окружение и сам обновит `env.json` в директории конфигов перед сборкой.
+Самый простой путь — запускать wizard (`run.sh`): мастер спросит окружение и подготовит per-env файл dart-defines.
+
+Важно: непосредственно в `flutter build` UploadTool прокидывает **не общий** `.uploadtool/env.json`, а пер‑окруженческий файл:
+
+- `state/<env>/dart_defines.json`
+
+Он формируется так:
+
+- копируется текущий `env.json` (чтобы сохранить остальные ключи, например `BASE_URL`)
+- затем в копии обновляется ключ окружения (`APP_ENV`/`CHOYS_ENV`/или ключ из `UPLOADTOOL_ENV_JSON_ENV_KEY`) под выбранный `dev`/`prod`
+
+Это нужно, чтобы при сборке `dev + prod` две сборки не перетирали общий JSON и не читали “не своё” окружение.
 
 Если выбрано `dev + prod`, wizard выполнит две публикации подряд:
 
@@ -98,9 +109,24 @@ cp /path/to/UploadTool/config/env.json.example .uploadtool/env.json
 - dev (тестовая сборка) — например `20260220.1.0`
 - prod (релизная сборка) — ядро `YYYYMMDD.N` на 1 больше + суффикс `.1` (пример: dev `20260220.1.0` → prod `20260220.2.1`)
 
+### State и retention артефактов
+
+После сборки `.ipa` копируется в:
+
+- `state/<env>/artifacts/app-<env>-<BUILD_NUMBER>.ipa`
+
+Чтобы `state/` не разрастался, включён retention:
+
+- хранится только последние `3` `.ipa` на окружение (`dev`/`prod`)
+- количество можно изменить переменной `UPLOADTOOL_STATE_ARTIFACTS_KEEP`
+
 Если собираешь/запускаешь из IDE — добавь в run конфиг Flutter аргумент:
 
 - `--dart-define-from-file=.uploadtool/env.json`
+
+Если хочешь 1:1 повторить поведение UploadTool для конкретного окружения — используй:
+
+- `--dart-define-from-file=.uploadtool/state/<env>/dart_defines.json`
 
 ### Авторизация в TestFlight
 

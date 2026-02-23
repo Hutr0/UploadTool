@@ -1,5 +1,42 @@
 #!/usr/bin/env bash
 
+uploadtool_cleanup_state_artifacts() {
+  local artifacts_dir="$1"
+  local tag="$2"
+  local keep="${UPLOADTOOL_STATE_ARTIFACTS_KEEP:-3}"
+
+  if [[ -z "$keep" ]]; then
+    keep="3"
+  fi
+  if [[ ! "$keep" =~ ^[0-9]+$ ]]; then
+    return 0
+  fi
+  if (( keep < 1 )); then
+    return 0
+  fi
+  if [[ ! -d "$artifacts_dir" ]]; then
+    return 0
+  fi
+
+  python3 - <<'PY' "$artifacts_dir" "$tag" "$keep"
+import glob, os, sys
+
+artifacts_dir = sys.argv[1]
+tag = sys.argv[2]
+keep = int(sys.argv[3])
+
+for ext in ("ipa", "aab"):
+    pattern = os.path.join(artifacts_dir, f"app-{tag}-*.{ext}")
+    files = glob.glob(pattern)
+    files.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    for p in files[keep:]:
+        try:
+            os.remove(p)
+        except Exception:
+            pass
+PY
+}
+
 uploadtool_build_android() {
   local tag="$1"
   local state_dir="$2"
@@ -48,6 +85,7 @@ PY
   mkdir -p "$artifacts_dir"
   local aab_copy="${artifacts_dir}/app-${tag}-${BUILD_NUMBER}.aab"
   cp -f "$aab" "$aab_copy"
+  uploadtool_cleanup_state_artifacts "$artifacts_dir" "$tag"
   echo "$aab_copy" > "${state_dir}/android_aab_path.txt"
   echo "   🤖 [Android] Сборка готова (${tag}): $aab_copy"
 }
@@ -101,6 +139,7 @@ PY
   mkdir -p "$artifacts_dir"
   local ipa_copy="${artifacts_dir}/app-${tag}-${BUILD_NUMBER}.ipa"
   cp -f "$ipa" "$ipa_copy"
+  uploadtool_cleanup_state_artifacts "$artifacts_dir" "$tag"
   echo "$ipa_copy" > "${state_dir}/ios_ipa_path.txt"
   echo "   📱 [iOS] Сборка готова (${tag}): $ipa_copy"
 }
@@ -153,7 +192,11 @@ uploadtool_run_for_env() {
   export BUILD_NUMBER="$build_number"
 
   mkdir -p "$state_dir"
-  uploadtool_write_env_to_file "${state_dir}/dart_defines.json" "$env"
+  local dart_defines_path="${state_dir}/dart_defines.json"
+  if [[ -n "${UPLOADTOOL_CONFIG_DIR:-}" && -f "${UPLOADTOOL_CONFIG_DIR}/env.json" ]]; then
+    cp -f "${UPLOADTOOL_CONFIG_DIR}/env.json" "$dart_defines_path"
+  fi
+  uploadtool_write_env_to_file "$dart_defines_path" "$env" "${UPLOADTOOL_ENV_JSON_ENV_KEY:-}"
   echo "   📌 Окружение для сборок: ${UPLOADTOOL_ENV_JSON_ENV_KEY:-APP_ENV}=$env, файл: ${state_dir}/dart_defines.json"
   if [[ -f "${state_dir}/dart_defines.json" ]]; then
     echo "      Содержимое: $(cat "${state_dir}/dart_defines.json" | tr -d '\n')"

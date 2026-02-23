@@ -160,6 +160,23 @@ bash ~/Tools/UploadTool/run.sh
 - `env.json` (dart-defines)
 - `logs/` и `state/` (runtime‑артефакты)
 
+По умолчанию логи и state создаются **рядом с конфигами**:
+
+- `UPLOAD_LOG_DIR`: `<config-dir>/logs` (переопределяется через `UPLOADTOOL_LOG_DIR`)
+- `UPLOAD_STATE_DIR`: `<config-dir>/state` (переопределяется через `UPLOADTOOL_STATE_DIR`)
+
+Для сборок мастер создаёт per-env файл dart-defines:
+
+- `<config-dir>/state/<env>/dart_defines.json`
+
+Он формируется копированием `<config-dir>/env.json` + обновлением ключа окружения (`APP_ENV`/`CHOYS_ENV`/или ключ из `UPLOADTOOL_ENV_JSON_ENV_KEY`).
+
+Артефакты сборок копируются в:
+
+- `<config-dir>/state/<env>/artifacts/`
+
+И автоматически чистятся (retention): хранится только последние `3` `.ipa` и последние `3` `.aab` на окружение. Количество можно изменить через `UPLOADTOOL_STATE_ARTIFACTS_KEEP`.
+
 Рекомендуется добавить в `.gitignore` проекта:
 
 ```gitignore

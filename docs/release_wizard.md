@@ -40,8 +40,13 @@ bash /path/to/UploadTool/run.sh --project-root /path/to/flutter_project --config
 UploadTool выбирает конфиг‑директорию так:
 
 - если передан `--config-dir` (или задан `UPLOADTOOL_CONFIG_DIR`) — берёт её
-- иначе, если есть `${PROJECT}/.uploadtool` — берёт её
-- иначе — использует `config/` рядом с `run.sh` (или `./UploadTool/config`, если UploadTool подключён как папка внутри проекта)
+- иначе, если определён Flutter‑проект (найден `pubspec.yaml`) — использует `<project>/.uploadtool` (и создаёт директорию при необходимости)
+- иначе — использует `config/` рядом с `run.sh`
+
+Логи и state по умолчанию живут рядом с конфигами:
+
+- `UPLOAD_LOG_DIR`: `<config-dir>/logs` (можно переопределить через `UPLOADTOOL_LOG_DIR`)
+- `UPLOAD_STATE_DIR`: `<config-dir>/state` (можно переопределить через `UPLOADTOOL_STATE_DIR`)
 
 Чтобы автоматически создать `.uploadtool/` и разложить туда шаблоны конфигов, можно использовать:
 
@@ -64,7 +69,38 @@ UploadTool выбирает конфиг‑директорию так:
 
 Важно: UploadTool **не навязывает** твоему приложению конкретные ключи. По умолчанию мастер пишет ключ `APP_ENV`.
 
-Мастер перед сборкой **сам обновляет** `env.json` в директории конфигов (например, `.uploadtool/env.json`).
+Мастер перед сборкой **использует** `env.json` из директории конфигов (например, `.uploadtool/env.json`) как базу.
+
+Перед каждой сборкой он создаёт пер‑окруженческий файл:
+
+- `state/<env>/dart_defines.json`
+
+Алгоритм такой:
+
+- копируем текущий `env.json` в `state/<env>/dart_defines.json` (чтобы не потерять остальные ключи, например `BASE_URL`)
+- затем обновляем в `state/<env>/dart_defines.json` ключ окружения (`APP_ENV`/`CHOYS_ENV`/или ключ из `UPLOADTOOL_ENV_JSON_ENV_KEY`) на `dev` или `prod`
+
+Это сделано специально, чтобы при сценарии `dev + prod` две сборки не перетирали общий файл и не читали “не своё” окружение.
+
+Минимальный пример (Flutter/Dart), как читать эти значения в приложении:
+
+```dart
+const appEnv = String.fromEnvironment('APP_ENV', defaultValue: 'prod');
+const baseUrl = String.fromEnvironment('BASE_URL', defaultValue: 'https://example.com');
+
+bool get isProd => appEnv == 'prod';
+```
+
+Пример привязки поведения и отображения версии к окружению (минимально):
+
+```dart
+// Показывай бейдж окружения, включай/выключай фичи, меняй логирование и т.п.
+final showDebugTools = appEnv != 'prod';
+
+// Версию и build number обычно берут из pubspec через package_info_plus,
+// а окружение — из dart-defines.
+final aboutText = 'env=$appEnv';
+```
 
 Если тебе нужна совместимость с существующим проектом:
 
@@ -76,6 +112,18 @@ UploadTool выбирает конфиг‑директорию так:
 - build number используется в формате `YYYYMMDD.N.X`, где `X`: `dev=0`, `prod=1`
 - dev публикуется как `YYYYMMDD.N.0` (пример: `20260220.1.0`)
 - prod — ядро `YYYYMMDD.N` на 1 больше + `.1` (пример: dev `20260220.1.0` → prod `20260220.2.1`)
+
+### 1.1) State и retention артефактов сборки
+
+После сборки UploadTool копирует артефакты в state:
+
+- iOS: `state/<env>/artifacts/app-<env>-<BUILD_NUMBER>.ipa`
+- Android: `state/<env>/artifacts/app-<env>-<BUILD_NUMBER>.aab`
+
+Чтобы директория `state/` не разрасталась, включён retention:
+
+- для каждого окружения (`dev`/`prod`) хранится только последние `3` `.ipa` и последние `3` `.aab`
+- количество можно изменить переменной `UPLOADTOOL_STATE_ARTIFACTS_KEEP` (например, `UPLOADTOOL_STATE_ARTIFACTS_KEEP=5`)
 
 
 
@@ -111,7 +159,11 @@ UploadTool выбирает конфиг‑директорию так:
 Где `PATH_TO_ENV_JSON` — это файл `env.json` из твоей директории конфигов:
 
 - если ты используешь рекомендованный вариант — это обычно `.uploadtool/env.json`
-- если ты используешь дефолт (без `.uploadtool`) — это может быть `./UploadTool/config/env.json` (если UploadTool внутри проекта) или `/path/to/UploadTool/config/env.json` (если он отдельно)
+- если ты запускаешь UploadTool без определённого Flutter‑проекта (нет `pubspec.yaml`) — тогда используется `config/env.json` рядом с `run.sh`
+
+Если хочешь 1:1 повторить поведение UploadTool для конкретного окружения — используй файл, который мастер подготовил для этого окружения:
+
+- `<config-dir>/state/<env>/dart_defines.json`
 
 ### Fastlane (встроенный)
 
