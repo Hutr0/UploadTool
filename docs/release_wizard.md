@@ -11,7 +11,11 @@
 
 ### Точки входа
 
-- `./Upload` — «как в этом проекте принято» (обёртка над UploadTool)
+- `./run.sh` — запуск мастера из репозитория UploadTool
+- `./run.sh ios|android|both` — запуск с предвыбранной платформой
+
+Если UploadTool подключён как папка `./UploadTool` внутри Flutter‑проекта:
+
 - `./UploadTool/run.sh` — запуск мастера напрямую
 - `./UploadTool/run.sh ios|android|both` — запуск с предвыбранной платформой
 
@@ -36,25 +40,72 @@ bash /path/to/UploadTool/run.sh --project-root /path/to/flutter_project --config
 UploadTool выбирает конфиг‑директорию так:
 
 - если передан `--config-dir` (или задан `UPLOADTOOL_CONFIG_DIR`) — берёт её
-- иначе, если есть `${PROJECT}/.uploadtool` — берёт её
-- иначе — использует `UploadTool/config`
+- иначе, если определён Flutter‑проект (найден `pubspec.yaml`) — использует `<project>/.uploadtool` (и создаёт директорию при необходимости)
+- иначе — использует `config/` рядом с `run.sh`
+
+Логи и state по умолчанию живут рядом с конфигами:
+
+- `UPLOAD_LOG_DIR`: `<config-dir>/logs` (можно переопределить через `UPLOADTOOL_LOG_DIR`)
+- `UPLOAD_STATE_DIR`: `<config-dir>/state` (можно переопределить через `UPLOADTOOL_STATE_DIR`)
+
+Чтобы автоматически создать `.uploadtool/` и разложить туда шаблоны конфигов, можно использовать:
+
+- `./run.sh init --project-root /path/to/flutter_project`
+
+Если хочется запускать UploadTool без постоянной передачи `--project-root/--config-dir`, можно сохранить дефолты:
+
+- `./run.sh init --project-root /path/to/flutter_project --save-defaults`
+
+Формат файла дефолтов: `config/cli.env.example`.
 
 ### 1) Окружение приложения (dev/prod) — `env.json`
 
 `env.json` — это dart‑defines, которые попадут в Flutter сборку через `--dart-define-from-file`.
 
-Поддерживаемые ключи:
+Поддерживаемые ключи (пример для универсального использования):
 
-- `CHOYS_ENV`: `dev` или `prod`
-- `CHOYS_BASE_URL`: опционально. Если задан (не пустой) — **перебивает** `CHOYS_ENV`.
+- `APP_ENV`: `dev` или `prod`
+- `BASE_URL`: опционально (если твоё приложение умеет его читать)
 
-Приоритет (как в приложении, так и в iOS ShareExtension):
+Важно: UploadTool **не навязывает** твоему приложению конкретные ключи. По умолчанию мастер пишет ключ `APP_ENV`.
 
-1) `CHOYS_BASE_URL` / `config.baseUrl`
-2) `CHOYS_ENV` / `config.env`
-3) если ничего не задано — **prod**
+Мастер перед сборкой **использует** `env.json` из директории конфигов (например, `.uploadtool/env.json`) как базу.
 
-Мастер перед сборкой **сам обновляет** `env.json` в директории конфигов (например, `.uploadtool/env.json`).
+Перед каждой сборкой он создаёт пер‑окруженческий файл:
+
+- `state/<env>/dart_defines.json`
+
+Алгоритм такой:
+
+- копируем текущий `env.json` в `state/<env>/dart_defines.json` (чтобы не потерять остальные ключи, например `BASE_URL`)
+- затем обновляем в `state/<env>/dart_defines.json` ключ окружения (`APP_ENV`/`CHOYS_ENV`/или ключ из `UPLOADTOOL_ENV_JSON_ENV_KEY`) на `dev` или `prod`
+
+Это сделано специально, чтобы при сценарии `dev + prod` две сборки не перетирали общий файл и не читали “не своё” окружение.
+
+Минимальный пример (Flutter/Dart), как читать эти значения в приложении:
+
+```dart
+const appEnv = String.fromEnvironment('APP_ENV', defaultValue: 'prod');
+const baseUrl = String.fromEnvironment('BASE_URL', defaultValue: 'https://example.com');
+
+bool get isProd => appEnv == 'prod';
+```
+
+Пример привязки поведения и отображения версии к окружению (минимально):
+
+```dart
+// Показывай бейдж окружения, включай/выключай фичи, меняй логирование и т.п.
+final showDebugTools = appEnv != 'prod';
+
+// Версию и build number обычно берут из pubspec через package_info_plus,
+// а окружение — из dart-defines.
+final aboutText = 'env=$appEnv';
+```
+
+Если тебе нужна совместимость с существующим проектом:
+
+- если файл уже содержит `CHOYS_ENV` (и не содержит `APP_ENV`) — UploadTool продолжит обновлять именно `CHOYS_ENV`
+- можно явно задать ключ через `UPLOADTOOL_ENV_JSON_ENV_KEY` (например, `UPLOADTOOL_ENV_JSON_ENV_KEY=MY_ENV`)
 
 Если выбираешь `dev + prod`, мастер делает две публикации подряд:
 
@@ -62,7 +113,19 @@ UploadTool выбирает конфиг‑директорию так:
 - dev публикуется как `YYYYMMDD.N.0` (пример: `20260220.1.0`)
 - prod — ядро `YYYYMMDD.N` на 1 больше + `.1` (пример: dev `20260220.1.0` → prod `20260220.2.1`)
 
-Важно про iOS ShareExtension: он берёт baseUrl из App Group (значения `config.env` / `config.baseUrl`), которые приложение записывает при старте. Поэтому после смены окружения рекомендуется **один раз запустить приложение**, чтобы extension точно подхватил актуальный baseUrl.
+### 1.1) State и retention артефактов сборки
+
+После сборки UploadTool копирует артефакты в state:
+
+- iOS: `state/<env>/artifacts/app-<env>-<BUILD_NUMBER>.ipa`
+- Android: `state/<env>/artifacts/app-<env>-<BUILD_NUMBER>.aab`
+
+Чтобы директория `state/` не разрасталась, включён retention:
+
+- для каждого окружения (`dev`/`prod`) хранится только последние `3` `.ipa` и последние `3` `.aab`
+- количество можно изменить переменной `UPLOADTOOL_STATE_ARTIFACTS_KEEP` (например, `UPLOADTOOL_STATE_ARTIFACTS_KEEP=5`)
+
+
 
 ### 2) Креды и настройки сборки/публикации — `release.env`
 
@@ -74,7 +137,7 @@ UploadTool выбирает конфиг‑директорию так:
 
 Пример со всеми опциями:
 
-- `UploadTool/config/release.env.example`
+- `config/release.env.example`
 
 ### 3) Поведение мастера (опционально) — `wizard.env`
 
@@ -85,7 +148,7 @@ UploadTool выбирает конфиг‑директорию так:
 
 Пример:
 
-- `UploadTool/config/wizard.env.example`
+- `config/wizard.env.example`
 
 ### Запуск из IDE (VSCode/Android Studio)
 
@@ -96,15 +159,19 @@ UploadTool выбирает конфиг‑директорию так:
 Где `PATH_TO_ENV_JSON` — это файл `env.json` из твоей директории конфигов:
 
 - если ты используешь рекомендованный вариант — это обычно `.uploadtool/env.json`
-- если ты используешь дефолт (когда UploadTool лежит внутри проекта) — это может быть `UploadTool/config/env.json`
+- если ты запускаешь UploadTool без определённого Flutter‑проекта (нет `pubspec.yaml`) — тогда используется `config/env.json` рядом с `run.sh`
+
+Если хочешь 1:1 повторить поведение UploadTool для конкретного окружения — используй файл, который мастер подготовил для этого окружения:
+
+- `<config-dir>/state/<env>/dart_defines.json`
 
 ### Fastlane (встроенный)
 
 Fastlane‑конфигурация теперь живёт внутри UploadTool:
 
-- `UploadTool/fastlane/Gemfile`
-- `UploadTool/fastlane/fastlane/Fastfile`
-- `UploadTool/fastlane/fastlane/Appfile`
+- `fastlane/Gemfile`
+- `fastlane/fastlane/Fastfile`
+- `fastlane/fastlane/Appfile`
 
 По умолчанию мастер делает `bundle install` именно там. При необходимости можно переопределить:
 
@@ -112,6 +179,6 @@ Fastlane‑конфигурация теперь живёт внутри UploadT
 
 ### Документация по платформам
 
-- iOS TestFlight: `UploadTool/docs/testflight.md`
-- Android Google Play: `UploadTool/docs/google_play.md`
+- iOS TestFlight: `docs/testflight.md`
+- Android Google Play: `docs/google_play.md`
 

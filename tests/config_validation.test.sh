@@ -20,6 +20,7 @@ _tmp="$(mktemp -d)"
 (
   # iOS: missing creds -> fail
   unset ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_PATH FASTLANE_USER FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD || true
+  unset IOS_APP_IDENTIFIER APP_IDENTIFIER || true
   if uploadtool_validate_config 1 0; then
     echo "validate_config should fail when iOS upload enabled and creds missing" >&2
     exit 1
@@ -29,7 +30,9 @@ _tmp="$(mktemp -d)"
   ASC_KEY_ID="K"
   ASC_ISSUER_ID="I"
   ASC_KEY_PATH="${_tmp}/missing.p8"
+  IOS_APP_IDENTIFIER="com.example.app"
   export ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_PATH
+  export IOS_APP_IDENTIFIER
   if uploadtool_validate_config 1 0; then
     echo "validate_config should fail when ASC_KEY_PATH missing" >&2
     exit 1
@@ -43,6 +46,7 @@ _tmp="$(mktemp -d)"
 
   # Android: missing creds -> fail
   unset PLAY_JSON_KEY_PATH SUPPLY_JSON_KEY || true
+  unset ANDROID_PACKAGE_NAME APP_PACKAGE_NAME || true
   if uploadtool_validate_config 0 1; then
     echo "validate_config should fail when Android upload enabled and creds missing" >&2
     exit 1
@@ -50,7 +54,9 @@ _tmp="$(mktemp -d)"
 
   # Android: path set but file missing -> fail
   PLAY_JSON_KEY_PATH="${_tmp}/missing.json"
+  ANDROID_PACKAGE_NAME="com.example.app"
   export PLAY_JSON_KEY_PATH
+  export ANDROID_PACKAGE_NAME
   if uploadtool_validate_config 0 1; then
     echo "validate_config should fail when PLAY_JSON_KEY_PATH missing" >&2
     exit 1
@@ -65,6 +71,7 @@ _tmp="$(mktemp -d)"
 
   # Both enabled: should fail if either side missing
   unset ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_PATH FASTLANE_USER FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD || true
+  unset IOS_APP_IDENTIFIER APP_IDENTIFIER || true
   SUPPLY_JSON_KEY="${_tmp}/svc.json"
   export SUPPLY_JSON_KEY
   if uploadtool_validate_config 1 1; then

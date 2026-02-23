@@ -22,8 +22,9 @@ def uploadtool_config_dir(repo_root)
   candidate = File.join(repo_root, ".uploadtool")
   return candidate if Dir.exist?(candidate)
 
-  candidate = File.join(repo_root, "UploadTool", "config")
-  return candidate if Dir.exist?(candidate)
+  # Default fallback: tool's own config directory
+  tool_config = File.expand_path("../../config", __dir__)
+  return tool_config if Dir.exist?(tool_config)
 
   ""
 end
@@ -79,7 +80,7 @@ platform :ios do
 
     app_identifier = ENV["IOS_APP_IDENTIFIER"].to_s.strip
     app_identifier = ENV["APP_IDENTIFIER"].to_s.strip if app_identifier == ""
-    app_identifier = "lifestyle.shopping.choys" if app_identifier == ""
+    UI.user_error!("Missing IOS_APP_IDENTIFIER (or APP_IDENTIFIER). Set it in release.env") if app_identifier == ""
 
     upload_args = {
       ipa: ipa_path,
@@ -126,7 +127,8 @@ platform :android do
     end
 
     package_name = ENV["ANDROID_PACKAGE_NAME"].to_s.strip
-    package_name = "lifestyle.shopping.choys" if package_name == ""
+    package_name = ENV["APP_PACKAGE_NAME"].to_s.strip if package_name == ""
+    UI.user_error!("Missing ANDROID_PACKAGE_NAME (or APP_PACKAGE_NAME). Set it in release.env") if package_name == ""
 
     json_key_path = ENV["PLAY_JSON_KEY_PATH"].to_s.strip
     json_key_path = ENV["SUPPLY_JSON_KEY"].to_s.strip if json_key_path == ""

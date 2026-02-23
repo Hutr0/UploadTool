@@ -60,7 +60,7 @@ uploadtool_run_cmd_override() {
 
   state_dir_android="${_tmp}/state/dev"
   mkdir -p "${state_dir_android}"
-  printf '{"CHOYS_ENV":"dev"}\n' > "${state_dir_android}/dart_defines.json"
+  printf '{"APP_ENV":"dev"}\n' > "${state_dir_android}/dart_defines.json"
 
   uploadtool_build_android "dev" "${state_dir_android}" || exit 1
   aab_path="$(cat "${state_dir_android}/android_aab_path.txt")"
@@ -69,7 +69,7 @@ uploadtool_run_cmd_override() {
 
   state_dir_ios="${_tmp}/state/dev"
   mkdir -p "${state_dir_ios}"
-  printf '{"CHOYS_ENV":"dev"}\n' > "${state_dir_ios}/dart_defines.json"
+  printf '{"APP_ENV":"dev"}\n' > "${state_dir_ios}/dart_defines.json"
 
   uploadtool_build_ios "dev" "${state_dir_ios}" || exit 1
   ipa_path="$(cat "${state_dir_ios}/ios_ipa_path.txt")"

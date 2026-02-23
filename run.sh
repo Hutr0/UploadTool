@@ -16,29 +16,241 @@ fi
 # CLI overrides
 PROJECT_ROOT_ARG=""
 CONFIG_DIR_ARG=""
+FASTLANE_ROOT_ARG=""
+PROJECT_PROFILE_ARG=""
+CLI_ENV_FILE="${UPLOADTOOL_CLI_ENV_FILE:-}"
 ENV_FILE="${ENV_FILE:-}"
-while [[ "${1:-}" == --* ]]; do
-  case "${1:-}" in
-    --env-file)
-      ENV_FILE="${2:-}"
-      shift 2
-      ;;
-    --project-root)
-      PROJECT_ROOT_ARG="${2:-}"
-      shift 2
-      ;;
-    --config-dir)
-      CONFIG_DIR_ARG="${2:-}"
-      shift 2
-      ;;
-    *)
-      break
-      ;;
-  esac
-done
+
+INIT_FORCE="${UPLOADTOOL_INIT_FORCE:-0}"
+INIT_SAVE_DEFAULTS="${UPLOADTOOL_INIT_SAVE_DEFAULTS:-0}"
+
+declare -a PARSED_REST=()
+parse_cli_overrides() {
+  while [[ "${1:-}" == --* ]]; do
+    case "${1:-}" in
+      --env-file)
+        ENV_FILE="${2:-}"
+        shift 2
+        ;;
+      --project-root)
+        PROJECT_ROOT_ARG="${2:-}"
+        shift 2
+        ;;
+      --config-dir)
+        CONFIG_DIR_ARG="${2:-}"
+        shift 2
+        ;;
+      --fastlane-root)
+        FASTLANE_ROOT_ARG="${2:-}"
+        shift 2
+        ;;
+      --env-json-env-key|--env-key)
+        export UPLOADTOOL_ENV_JSON_ENV_KEY="${2:-}"
+        shift 2
+        ;;
+      --project)
+        PROJECT_PROFILE_ARG="${2:-}"
+        shift 2
+        ;;
+      --cli-env-file)
+        CLI_ENV_FILE="${2:-}"
+        shift 2
+        ;;
+      --save-defaults)
+        INIT_SAVE_DEFAULTS="1"
+        shift 1
+        ;;
+      --no-save-defaults)
+        INIT_SAVE_DEFAULTS="0"
+        shift 1
+        ;;
+      --force)
+        INIT_FORCE="1"
+        shift 1
+        ;;
+      --no-force)
+        INIT_FORCE="0"
+        shift 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+  PARSED_REST=("$@")
+}
+
+uploadtool_write_cli_env_file() {
+  local file_path="$1"
+  local project_root="$2"
+  local config_dir="$3"
+  local fastlane_root="${4:-}"
+  local env_key="${5:-}"
+
+  local dir_name
+  dir_name="$(dirname "$file_path")"
+  mkdir -p "$dir_name"
+
+  cat >"$file_path" <<EOF
+UPLOADTOOL_CLI_PROJECT_ROOT="$project_root"
+UPLOADTOOL_CLI_CONFIG_DIR="$config_dir"
+EOF
+
+  if [[ -n "$fastlane_root" ]]; then
+    printf '%s\n' "UPLOADTOOL_CLI_FASTLANE_ROOT=\"$fastlane_root\"" >>"$file_path"
+  fi
+  if [[ -n "$env_key" ]]; then
+    printf '%s\n' "UPLOADTOOL_CLI_ENV_JSON_ENV_KEY=\"$env_key\"" >>"$file_path"
+  fi
+}
+
+uploadtool_cli_init() {
+  if [[ "${#@}" -ne 0 ]]; then
+    echo "❌ Неизвестные аргументы для init: $*" >&2
+    return 1
+  fi
+
+  local project_root
+  project_root="${PROJECT_ROOT_ARG:-${UPLOADTOOL_PROJECT_ROOT:-${UPLOADTOOL_CLI_PROJECT_ROOT:-}}}"
+  if [[ -z "$project_root" ]]; then
+    if [[ -f "${PWD}/pubspec.yaml" ]]; then
+      project_root="$PWD"
+    else
+      read -r -p "Путь к Flutter-проекту (где pubspec.yaml): " project_root
+    fi
+  fi
+  if [[ -z "$project_root" ]]; then
+    echo "❌ Не задан --project-root и не удалось определить проект." >&2
+    return 1
+  fi
+  if [[ ! -d "$project_root" ]]; then
+    echo "❌ Директория проекта не найдена: $project_root" >&2
+    return 1
+  fi
+  project_root="$(cd "$project_root" && pwd)"
+  if [[ ! -f "$project_root/pubspec.yaml" ]]; then
+    echo "❌ Не найден pubspec.yaml в: $project_root" >&2
+    return 1
+  fi
+
+  local config_dir
+  config_dir="${CONFIG_DIR_ARG:-${UPLOADTOOL_CONFIG_DIR:-${UPLOADTOOL_CLI_CONFIG_DIR:-$project_root/.uploadtool}}}"
+  if [[ "$config_dir" != /* ]]; then
+    config_dir="$project_root/$config_dir"
+  fi
+
+  mkdir -p "$config_dir"
+  config_dir="$(cd "$config_dir" && pwd)"
+
+  local src_dir
+  src_dir="$UPLOAD_TOOL_DIR/config"
+  if [[ ! -d "$src_dir" ]]; then
+    echo "❌ Не найдена директория шаблонов: $src_dir" >&2
+    return 1
+  fi
+
+  echo
+  echo "🧰 UploadTool init"
+  echo "   Project: $project_root"
+  echo "   Config:  $config_dir"
+
+  _copy_example() {
+    local src="$1"
+    local dst="$2"
+    local label="$3"
+
+    if [[ -f "$dst" && "${INIT_FORCE:-0}" != "1" ]]; then
+      echo "   ✅ $label уже существует: $dst (пропущено)"
+      return 0
+    fi
+    cp -f "$src" "$dst"
+    echo "   ➕ $label: $dst"
+  }
+
+  _copy_example "$src_dir/env.json.example" "$config_dir/env.json" "env.json"
+  _copy_example "$src_dir/release.env.example" "$config_dir/release.env" "release.env"
+  _copy_example "$src_dir/wizard.env.example" "$config_dir/wizard.env" "wizard.env"
+
+  if [[ "${INIT_SAVE_DEFAULTS:-0}" == "1" ]]; then
+    local cli_file
+    cli_file="$CLI_ENV_FILE"
+    if [[ -z "$cli_file" ]]; then
+      cli_file="$config_dir/cli.env"
+    fi
+    if [[ -z "$cli_file" ]]; then
+      echo "❌ Не удалось определить путь для cli.env (нет HOME и не передан --cli-env-file / UPLOADTOOL_CLI_ENV_FILE)" >&2
+      return 1
+    fi
+
+    uploadtool_write_cli_env_file "$cli_file" "$project_root" "$config_dir" "${FASTLANE_ROOT_ARG:-}" "${UPLOADTOOL_ENV_JSON_ENV_KEY:-}"
+    echo "   💾 Сохранены дефолты CLI: $cli_file"
+  fi
+
+  echo
+  echo "🎉 Готово. Дальше открой и заполни:"
+  echo "   - $config_dir/release.env"
+  echo
+  echo "Запуск:"
+  echo "   bash $UPLOAD_TOOL_DIR/run.sh --project-root $project_root --config-dir $config_dir"
+  echo
+  return 0
+}
+
+parse_cli_overrides "$@"
+if (( ${#PARSED_REST[@]} )); then
+  set -- "${PARSED_REST[@]}"
+else
+  set --
+fi
+
+source "$UPLOAD_TOOL_DIR/lib/profiles.sh"
+
+# Если cli.env задан явно (флагом или env-переменной) — загрузим его сразу,
+# чтобы он мог задать UPLOADTOOL_CLI_PROJECT_ROOT/UPLOADTOOL_CLI_CONFIG_DIR
+# ещё до выбора проекта.
+if [[ -n "$CLI_ENV_FILE" && -f "$CLI_ENV_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$CLI_ENV_FILE"
+fi
+
+COMMAND="${1:-}"
+if [[ "$COMMAND" == "init" || "$COMMAND" == "setup" ]]; then
+  shift
+  parse_cli_overrides "$@"
+  if (( ${#PARSED_REST[@]} )); then
+    set -- "${PARSED_REST[@]}"
+  else
+    set --
+  fi
+
+  uploadtool_cli_init "$@"
+  exit $?
+fi
 
 # Flutter project root (ROOT_DIR)
-PROJECT_ROOT="${PROJECT_ROOT_ARG:-${UPLOADTOOL_PROJECT_ROOT:-${ROOT_DIR:-}}}"
+# Важно: не используем ROOT_DIR из внешней среды, чтобы случайно не подхватить
+# «чужой» проект (ROOT_DIR — внутренняя переменная этого скрипта).
+PROJECT_ROOT="${PROJECT_ROOT_ARG:-${UPLOADTOOL_CLI_PROJECT_ROOT:-${UPLOADTOOL_PROJECT_ROOT:-}}}"
+
+if [[ -z "$PROJECT_ROOT" && -n "$PROJECT_PROFILE_ARG" ]]; then
+  if uploadtool_load_profile "$PROJECT_PROFILE_ARG"; then
+    export UPLOADTOOL_SELECTED_PROJECT="$PROJECT_PROFILE_ARG"
+    PROJECT_ROOT="${UPLOADTOOL_CLI_PROJECT_ROOT:-}"
+    if [[ -z "$CONFIG_DIR_ARG" && -z "${UPLOADTOOL_CONFIG_DIR:-}" && -n "${UPLOADTOOL_CLI_CONFIG_DIR:-}" ]]; then
+      CONFIG_DIR_ARG="$UPLOADTOOL_CLI_CONFIG_DIR"
+    fi
+    if [[ -z "$FASTLANE_ROOT_ARG" && -z "${UPLOADTOOL_FASTLANE_ROOT:-}" && -n "${UPLOADTOOL_CLI_FASTLANE_ROOT:-}" ]]; then
+      FASTLANE_ROOT_ARG="$UPLOADTOOL_CLI_FASTLANE_ROOT"
+    fi
+    if [[ -z "${UPLOADTOOL_ENV_JSON_ENV_KEY:-}" && -n "${UPLOADTOOL_CLI_ENV_JSON_ENV_KEY:-}" ]]; then
+      export UPLOADTOOL_ENV_JSON_ENV_KEY="$UPLOADTOOL_CLI_ENV_JSON_ENV_KEY"
+    fi
+  else
+    echo "❌ Не удалось загрузить профиль проекта: $PROJECT_PROFILE_ARG" >&2
+    exit 1
+  fi
+fi
+
 if [[ -z "$PROJECT_ROOT" ]]; then
   default_candidate="$(cd "$UPLOAD_TOOL_DIR/.." && pwd)"
   if [[ -f "$default_candidate/pubspec.yaml" ]]; then
@@ -47,9 +259,48 @@ if [[ -z "$PROJECT_ROOT" ]]; then
     PROJECT_ROOT="$PWD"
   fi
 fi
+
+if [[ -z "$PROJECT_ROOT" ]]; then
+  selected_profile=""
+  if [[ -n "$PROJECT_PROFILE_ARG" ]]; then
+    selected_profile="$PROJECT_PROFILE_ARG"
+  else
+    selected_profile="$(uploadtool_get_default_profile || true)"
+  fi
+
+  if [[ -z "$selected_profile" ]]; then
+    if [[ -t 0 ]]; then
+      selected_profile="$(uploadtool_prompt_select_profile || true)"
+    fi
+  fi
+
+  if [[ -n "$selected_profile" ]]; then
+    if uploadtool_load_profile "$selected_profile"; then
+      export UPLOADTOOL_SELECTED_PROJECT="$selected_profile"
+      PROJECT_ROOT="${UPLOADTOOL_CLI_PROJECT_ROOT:-}"
+      if [[ -z "$CONFIG_DIR_ARG" && -z "${UPLOADTOOL_CONFIG_DIR:-}" && -n "${UPLOADTOOL_CLI_CONFIG_DIR:-}" ]]; then
+        CONFIG_DIR_ARG="$UPLOADTOOL_CLI_CONFIG_DIR"
+      fi
+      if [[ -z "$FASTLANE_ROOT_ARG" && -z "${UPLOADTOOL_FASTLANE_ROOT:-}" && -n "${UPLOADTOOL_CLI_FASTLANE_ROOT:-}" ]]; then
+        FASTLANE_ROOT_ARG="$UPLOADTOOL_CLI_FASTLANE_ROOT"
+      fi
+      if [[ -z "${UPLOADTOOL_ENV_JSON_ENV_KEY:-}" && -n "${UPLOADTOOL_CLI_ENV_JSON_ENV_KEY:-}" ]]; then
+        export UPLOADTOOL_ENV_JSON_ENV_KEY="$UPLOADTOOL_CLI_ENV_JSON_ENV_KEY"
+      fi
+    else
+      echo "❌ Не удалось загрузить профиль проекта: $selected_profile" >&2
+      exit 1
+    fi
+  fi
+fi
+
+if [[ -z "$PROJECT_ROOT" ]]; then
+  PROJECT_ROOT="${UPLOADTOOL_CLI_PROJECT_ROOT:-}"
+fi
 if [[ -z "$PROJECT_ROOT" ]]; then
   echo "❌ Не удалось определить корень Flutter-проекта (где pubspec.yaml)." >&2
   echo "   Укажи через --project-root /path/to/flutter или ENV UPLOADTOOL_PROJECT_ROOT." >&2
+  echo "   Или выбери сохранённый проект через --project <name> (см. init.sh)." >&2
   exit 1
 fi
 
@@ -62,26 +313,81 @@ if [[ "${UPLOADTOOL_SKIP_SAFE_PATH:-}" != "1" ]]; then
   export PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 fi
 
-# Конфиги могут жить рядом с проектом (например <project>/.uploadtool),
-# а сам UploadTool может быть клонирован куда угодно.
-UPLOAD_CONFIG_DIR="${CONFIG_DIR_ARG:-${UPLOADTOOL_CONFIG_DIR:-}}"
+require_cmd() {
+  local cmd="$1"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "❌ Не найдена зависимость: '$cmd'" >&2
+    exit 1
+  fi
+}
+
+require_cmd python3
+require_cmd flutter
+
+# Конфиги/логи/state должны относиться к конкретному Flutter-проекту.
+# Поэтому дефолтная директория — <project>/.uploadtool.
+UPLOAD_CONFIG_DIR="${CONFIG_DIR_ARG:-${UPLOADTOOL_CONFIG_DIR:-${UPLOADTOOL_CLI_CONFIG_DIR:-}}}"
+UPLOAD_CONFIG_DIR_DEFAULTED="0"
 if [[ -z "$UPLOAD_CONFIG_DIR" ]]; then
-  if [[ -d "$ROOT_DIR/.uploadtool" ]]; then
+  UPLOAD_CONFIG_DIR_DEFAULTED="1"
+  if [[ -f "$ROOT_DIR/pubspec.yaml" ]]; then
     UPLOAD_CONFIG_DIR="$ROOT_DIR/.uploadtool"
   else
     UPLOAD_CONFIG_DIR="$UPLOAD_TOOL_DIR/config"
   fi
 fi
+
+# Если путь передан относительным, делаем его абсолютным относительно ROOT_DIR.
+if [[ "$UPLOAD_CONFIG_DIR" != /* ]]; then
+  UPLOAD_CONFIG_DIR="$ROOT_DIR/$UPLOAD_CONFIG_DIR"
+fi
+
+if [[ -z "$CLI_ENV_FILE" ]]; then
+  if [[ -f "$UPLOAD_CONFIG_DIR/cli.env" ]]; then
+    CLI_ENV_FILE="$UPLOAD_CONFIG_DIR/cli.env"
+  elif [[ -n "${HOME:-}" && -f "$HOME/.uploadtool/cli.env" ]]; then
+    CLI_ENV_FILE="$HOME/.uploadtool/cli.env"
+  fi
+fi
+
+if [[ -n "$CLI_ENV_FILE" && -f "$CLI_ENV_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$CLI_ENV_FILE"
+fi
+
+if [[ -z "${UPLOADTOOL_ENV_JSON_ENV_KEY:-}" && -n "${UPLOADTOOL_CLI_ENV_JSON_ENV_KEY:-}" ]]; then
+  export UPLOADTOOL_ENV_JSON_ENV_KEY="$UPLOADTOOL_CLI_ENV_JSON_ENV_KEY"
+fi
+
+if [[ ! -d "$UPLOAD_CONFIG_DIR" ]]; then
+  # Если это дефолтная проектная директория — создаём автоматически.
+  if [[ "$UPLOAD_CONFIG_DIR_DEFAULTED" == "1" && "$UPLOAD_CONFIG_DIR" == "$ROOT_DIR/.uploadtool" ]]; then
+    mkdir -p "$UPLOAD_CONFIG_DIR"
+  else
+    echo "❌ Не найдена директория конфигов: $UPLOAD_CONFIG_DIR" >&2
+    echo "   Создай её (например: mkdir -p .uploadtool) или передай корректный --config-dir." >&2
+    exit 1
+  fi
+fi
+
+# Приведём путь к каноническому абсолютному виду (без ../ и .), чтобы вывод
+# был понятным, а сравнения путей работали корректно.
+UPLOAD_CONFIG_DIR="$(cd "$UPLOAD_CONFIG_DIR" && pwd)"
 export UPLOADTOOL_CONFIG_DIR="$UPLOAD_CONFIG_DIR"
 
-UPLOAD_LOG_DIR="${UPLOADTOOL_LOG_DIR:-$UPLOAD_TOOL_DIR/logs}"
-UPLOAD_STATE_DIR="${UPLOADTOOL_STATE_DIR:-$UPLOAD_TOOL_DIR/state}"
+runtime_root="$UPLOAD_TOOL_DIR"
+if [[ "$UPLOAD_CONFIG_DIR" != "$UPLOAD_TOOL_DIR/config" ]]; then
+  runtime_root="$UPLOAD_CONFIG_DIR"
+fi
+
+UPLOAD_LOG_DIR="${UPLOADTOOL_LOG_DIR:-$runtime_root/logs}"
+UPLOAD_STATE_DIR="${UPLOADTOOL_STATE_DIR:-$runtime_root/state}"
 
 default_fastlane_root="$UPLOAD_TOOL_DIR/fastlane"
 if [[ ! -f "$default_fastlane_root/Gemfile" ]]; then
   default_fastlane_root="$ROOT_DIR/ios"
 fi
-UPLOADTOOL_FASTLANE_ROOT="${UPLOADTOOL_FASTLANE_ROOT:-$default_fastlane_root}"
+UPLOADTOOL_FASTLANE_ROOT="${FASTLANE_ROOT_ARG:-${UPLOADTOOL_FASTLANE_ROOT:-${UPLOADTOOL_CLI_FASTLANE_ROOT:-$default_fastlane_root}}}"
 export UPLOADTOOL_FASTLANE_ROOT
 
 source "$UPLOAD_TOOL_DIR/lib/versioning.sh"
@@ -100,12 +406,12 @@ else
   TARGET_ARG=""
 fi
 
-# Единственный источник кредов и настроек сборки/публикации — release.env (или .env.release).
-ENV_FILE="$(uploadtool_select_env_file "${ENV_FILE:-}" "$UPLOAD_CONFIG_DIR" "$ROOT_DIR")"
+# Единственный источник кредов и настроек сборки/публикации — release.env.
+ENV_FILE="$(uploadtool_select_env_file "${ENV_FILE:-}" "$UPLOAD_CONFIG_DIR")"
 uploadtool_load_env_file_if_present "$ENV_FILE"
 
 # Настройки поведения мастера (значения по умолчанию и пропуск шагов). Опционально.
-# См. UploadTool/config/wizard.env.example
+# См. config/wizard.env.example
 uploadtool_load_wizard_env_if_present "$UPLOAD_CONFIG_DIR/wizard.env"
 
 pubspec_version_line="$(sed -nE 's/^version:[[:space:]]*([^[:space:]]+).*/\1/p' pubspec.yaml | head -n 1 || true)"
@@ -122,7 +428,12 @@ echo
 echo "🚀 Release wizard"
 echo "   Project: $ROOT_DIR"
 echo "   Tool:    $UPLOAD_TOOL_DIR"
+echo "   Config:  $UPLOAD_CONFIG_DIR"
+echo "   Logs:    $UPLOAD_LOG_DIR"
+echo "   State:   $UPLOAD_STATE_DIR"
+echo "   Fastlane:$UPLOADTOOL_FASTLANE_ROOT"
 echo "   Release: ${ENV_FILE:-<none>}"
+echo "   Env key: ${UPLOADTOOL_ENV_JSON_ENV_KEY:-APP_ENV}"
 [[ -f "$UPLOAD_CONFIG_DIR/wizard.env" ]] && echo "   Wizard:  $UPLOAD_CONFIG_DIR/wizard.env"
 echo
 
@@ -158,9 +469,43 @@ fi
 echo
 ENV_JSON="$UPLOAD_CONFIG_DIR/env.json"
 CURRENT_ENV=""
+ENV_JSON_ENV_KEY="${UPLOADTOOL_ENV_JSON_ENV_KEY:-}"
 if [[ -f "$ENV_JSON" ]]; then
-  CURRENT_ENV="$(python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p,"r",encoding="utf-8")); print(d.get("CHOYS_ENV",""))' "$ENV_JSON" 2>/dev/null || true)"
+  if [[ -z "$ENV_JSON_ENV_KEY" ]]; then
+    ENV_JSON_ENV_KEY="$(python3 -c 'import json,sys
+p=sys.argv[1]
+try:
+  d=json.load(open(p,"r",encoding="utf-8"))
+except Exception:
+  d={}
+k=""
+if isinstance(d,dict):
+  if "APP_ENV" in d: k="APP_ENV"
+  elif "CHOYS_ENV" in d: k="CHOYS_ENV"
+print(k)
+' "$ENV_JSON" 2>/dev/null || true)"
+  fi
+
+  CURRENT_ENV="$(python3 -c 'import json,sys
+p=sys.argv[1]
+key=sys.argv[2]
+try:
+  d=json.load(open(p,"r",encoding="utf-8"))
+except Exception:
+  d={}
+v=""
+if isinstance(d,dict):
+  if key and key in d and d.get(key):
+    v=d.get(key) or ""
+  else:
+    v=d.get("APP_ENV") or d.get("CHOYS_ENV") or ""
+print(v)
+' "$ENV_JSON" "$ENV_JSON_ENV_KEY" 2>/dev/null || true)"
 fi
+if [[ -z "$ENV_JSON_ENV_KEY" ]]; then
+  ENV_JSON_ENV_KEY="APP_ENV"
+fi
+export UPLOADTOOL_ENV_JSON_ENV_KEY="$ENV_JSON_ENV_KEY"
 if [[ "$CURRENT_ENV" != "dev" && "$CURRENT_ENV" != "prod" ]]; then
   CURRENT_ENV="prod"
 fi
@@ -170,7 +515,7 @@ write_env_json() {
   write_env_to_file "$ENV_JSON" "$env"
 }
 
-# Write CHOYS_ENV (and any other keys from current ENV_JSON) to a given path.
+# Write env key (and any other keys from current ENV_JSON) to a given path.
 # Used so each build (dev/prod) has its own dart_defines file and never reads a shared file that gets overwritten.
 write_env_to_file() {
   local path="$1"
@@ -203,8 +548,8 @@ if [[ -n "${WIZARD_SKIP_ENV:-}" && "${WIZARD_SKIP_ENV}" == "1" ]]; then
   echo "🌍 Окружение: $ENV_TARGETS (из wizard.env, шаг пропущен)"
 else
   echo "🌍 Окружение (env.json):"
-  echo "   1) только dev  🧪  (https://choys.dnadev.ru)"
-  echo "   2) только prod 🏪  (https://my.choys.app)"
+  echo "   1) только dev  🧪"
+  echo "   2) только prod 🏪"
   echo "   3) dev + prod  🎯  (по умолчанию)"
   read -r -p "   Выбор (1/2/3) [${default_e}]: " env_choice
   env_choice="${env_choice:-$default_e}"
@@ -407,7 +752,12 @@ build_ios() {
 
 echo
 echo "⚙️  Подготовка fastlane (bundle install)..."
-uploadtool_run_cmd_in_dir "$UPLOADTOOL_FASTLANE_ROOT" bundle install --path vendor/bundle
+if [[ "${UPLOAD_IOS:-0}" -eq 1 || "${UPLOAD_ANDROID:-0}" -eq 1 ]]; then
+  require_cmd bundle
+  uploadtool_run_cmd_in_dir "$UPLOADTOOL_FASTLANE_ROOT" bundle install --path vendor/bundle
+else
+  echo "   Пропущено: загрузка в сторы выключена"
+fi
 
 UPLOAD_STATUS_FILES=()
 UPLOAD_LABELS=()

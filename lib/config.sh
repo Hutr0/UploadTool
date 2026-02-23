@@ -3,7 +3,6 @@
 uploadtool_select_env_file() {
   local initial_env_file="${1:-}"
   local upload_config_dir="$2"
-  local root_dir="$3"
 
   if [[ -n "$initial_env_file" ]]; then
     printf '%s\n' "$initial_env_file"
@@ -48,6 +47,14 @@ uploadtool_validate_config() {
     local has_asc=0
     local has_apple_id=0
 
+    local app_id="${IOS_APP_IDENTIFIER:-}"
+    if [[ -z "$app_id" ]]; then
+      app_id="${APP_IDENTIFIER:-}"
+    fi
+    if [[ -z "$app_id" ]]; then
+      errors+=("[iOS] Не задан IOS_APP_IDENTIFIER (или APP_IDENTIFIER) в release.env")
+    fi
+
     if [[ -n "${ASC_KEY_ID:-}" && -n "${ASC_ISSUER_ID:-}" && -n "${ASC_KEY_PATH:-}" ]]; then
       has_asc=1
     fi
@@ -69,6 +76,14 @@ uploadtool_validate_config() {
   fi
 
   if [[ "$upload_android" -eq 1 ]]; then
+    local package_name="${ANDROID_PACKAGE_NAME:-}"
+    if [[ -z "$package_name" ]]; then
+      package_name="${APP_PACKAGE_NAME:-}"
+    fi
+    if [[ -z "$package_name" ]]; then
+      errors+=("[Android] Не задан ANDROID_PACKAGE_NAME (или APP_PACKAGE_NAME) в release.env")
+    fi
+
     local json_key_path="${PLAY_JSON_KEY_PATH:-}"
     if [[ -z "$json_key_path" ]]; then
       json_key_path="${SUPPLY_JSON_KEY:-}"
