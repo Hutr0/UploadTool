@@ -375,6 +375,9 @@ fi
 UPLOAD_CONFIG_DIR="$(cd "$UPLOAD_CONFIG_DIR" && pwd)"
 export UPLOADTOOL_CONFIG_DIR="$UPLOAD_CONFIG_DIR"
 
+# Файл для локального хранения FASTLANE_SESSION (пер-проект, не для git).
+FASTLANE_SESSION_FILE="$UPLOAD_CONFIG_DIR/fastlane_session.env"
+
 runtime_root="$UPLOAD_TOOL_DIR"
 if [[ "$UPLOAD_CONFIG_DIR" != "$UPLOAD_TOOL_DIR/config" ]]; then
   runtime_root="$UPLOAD_CONFIG_DIR"
@@ -440,6 +443,12 @@ echo
 targets="${RELEASE_TARGETS:-}"
 if [[ -z "$targets" ]]; then
   targets="$TARGET_ARG"
+fi
+
+# Если есть сохранённый FASTLANE_SESSION — подхватим его до любых вызовов fastlane.
+if [[ -f "$FASTLANE_SESSION_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$FASTLANE_SESSION_FILE"
 fi
 
 # Значение по умолчанию для «Куда собираем?» (1=ios, 2=android, 3=both)
@@ -750,11 +759,86 @@ build_ios() {
   uploadtool_build_ios "$@"
 }
 
+# Запускает интерактивный fastlane spaceauth и сохраняет FASTLANE_SESSION
+# в локальный файл, чтобы фоновые загрузки не просили код 2FA "в никуда".
+uploadtool_fastlane_ensure_session() {
+  # Нужна только для iOS-загрузок и только если мастер запущен в интерактивном терминале.
+  if [[ "${UPLOAD_IOS:-0}" -ne 1 ]]; then
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    # В CI или при неинтерактивном запуске не трогаем авторизацию.
+    return 0
+  fi
+  # При авторизации по API-ключу App Store Connect сессия не нужна.
+  if [[ -n "${ASC_KEY_ID:-}" ]]; then
+    return 0
+  fi
+  # Нужен FASTLANE_USER, иначе fastlane spaceauth не имеет смысла.
+  if [[ -z "${FASTLANE_USER:-}" ]]; then
+    return 0
+  fi
+  # Если fastlane_root не определён — тоже выходим.
+  if [[ -z "${UPLOADTOOL_FASTLANE_ROOT:-}" || ! -d "$UPLOADTOOL_FASTLANE_ROOT" ]]; then
+    return 0
+  fi
+
+  echo
+  echo "🔐 Проверка авторизации fastlane (spaceauth)..."
+  echo "   Apple ID: ${FASTLANE_USER}"
+  echo "   Если потребуется, введи код, который придёт на устройства Apple."
+
+  local tmp_log
+  tmp_log="$(mktemp)"
+
+  (
+    cd "$UPLOADTOOL_FASTLANE_ROOT"
+    set +e
+    # Явно указываем Gemfile, чтобы использовать встроенный fastlane.
+    BUNDLE_GEMFILE="$PWD/Gemfile" bundle exec fastlane spaceauth -u "$FASTLANE_USER"
+  ) 2>&1 | tee "$tmp_log"
+
+  # В выводе spaceauth обычно есть строка вида:
+  #   export FASTLANE_SESSION='...'
+  local env_line
+  env_line="$(grep -E 'FASTLANE_SESSION' "$tmp_log" | tail -n 1 || true)"
+  rm -f "$tmp_log"
+
+  if [[ -z "$env_line" ]]; then
+    echo "   ⚠️  Не удалось найти FASTLANE_SESSION в выводе fastlane spaceauth."
+    echo "       Продолжаем без автосохранения сессии."
+    return 0
+  fi
+
+  # Уберём префикс export, если он есть, и отрежем всё лишнее после точки с запятой.
+  env_line="${env_line#export }"
+  env_line="${env_line%%;*}"
+
+  if [[ "$env_line" != FASTLANE_SESSION=* ]]; then
+    echo "   ⚠️  Строка с сессией имеет неожиданный формат:"
+    echo "       $env_line"
+    echo "       Продолжаем без автосохранения."
+    return 0
+  fi
+
+  mkdir -p "$UPLOAD_CONFIG_DIR"
+  printf '%s\n' "$env_line" >"$FASTLANE_SESSION_FILE"
+  chmod 600 "$FASTLANE_SESSION_FILE" 2>/dev/null || true
+
+  # Подхватим новую сессию в текущем процессе.
+  eval "$env_line"
+  echo "   ✅ FASTLANE_SESSION обновлён и сохранён в:"
+  echo "      $FASTLANE_SESSION_FILE"
+}
+
 echo
 echo "⚙️  Подготовка fastlane (bundle install)..."
 if [[ "${UPLOAD_IOS:-0}" -eq 1 || "${UPLOAD_ANDROID:-0}" -eq 1 ]]; then
   require_cmd bundle
   uploadtool_run_cmd_in_dir "$UPLOADTOOL_FASTLANE_ROOT" bundle install --path vendor/bundle
+  # После установки fastlane прогоняем интерактивный spaceauth (если актуально),
+  # чтобы FASTLANE_SESSION был валиден ещё до фоновых загрузок.
+  uploadtool_fastlane_ensure_session
 else
   echo "   Пропущено: загрузка в сторы выключена"
 fi
@@ -788,6 +872,7 @@ run_for_env() {
 }
 
 UPLOAD_OR_BUILD_FAILED=0
+
 if [[ "$ENV_TARGETS" == "both" ]]; then
   # Сборки dev и prod по очереди (run_for_env вызываются последовательно), чтобы оба не
   # писали в один build/ — иначе артефакт dev может оказаться от prod. Загрузки ждать здесь
