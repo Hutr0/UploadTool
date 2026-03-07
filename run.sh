@@ -786,38 +786,58 @@ uploadtool_fastlane_ensure_session() {
   echo
   echo "🔐 Проверка авторизации fastlane (spaceauth)..."
   echo "   Apple ID: ${FASTLANE_USER}"
-  echo "   Если потребуется, введи код, который придёт на устройства Apple."
+  echo "   Если сессия ещё действует — запроса пароля не будет."
+  echo "   (Пароль можно задать в release.env: FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD)"
+  echo
 
   local tmp_log
   tmp_log="$(mktemp)"
+  local had_session="0"
+  [[ -n "${FASTLANE_SESSION:-}" ]] && had_session="1"
 
-  (
-    cd "$UPLOADTOOL_FASTLANE_ROOT"
-    set +e
-    # Явно указываем Gemfile, чтобы использовать встроенный fastlane.
-    BUNDLE_GEMFILE="$PWD/Gemfile" bundle exec fastlane spaceauth -u "$FASTLANE_USER"
-  ) 2>&1 | tee "$tmp_log"
+  # Запуск spaceauth в PTY (script), чтобы fastlane при необходимости мог запросить пароль/2FA.
+  # Синтаксис script -q <file> <command> проверен на macOS (BSD script); на Linux (GNU script) может отличаться.
+  _run_spaceauth() {
+    export UPLOADTOOL_FASTLANE_ROOT FASTLANE_USER
+    script -q "$tmp_log" bash -c 'cd "$UPLOADTOOL_FASTLANE_ROOT" && export BUNDLE_GEMFILE="$UPLOADTOOL_FASTLANE_ROOT/Gemfile" && bundle exec fastlane spaceauth -u "$FASTLANE_USER"'
+  }
 
-  # В выводе spaceauth обычно есть строка вида:
-  #   export FASTLANE_SESSION='...'
+  _run_spaceauth
+  local spaceauth_rc=$?
+
+  # Если первая попытка с текущей сессией не удалась и сессия была — значит протухла, пробуем заново без неё.
+  if [[ "$spaceauth_rc" -ne 0 && "$had_session" == "1" ]]; then
+    echo "   Сессия протухла, повторный вход (введи пароль/2FA при запросе)..."
+    unset FASTLANE_SESSION
+    _run_spaceauth
+    spaceauth_rc=$?
+  fi
+
+  if [[ "$spaceauth_rc" -ne 0 ]]; then
+    echo "   ❌ spaceauth завершился с кодом $spaceauth_rc (проверь логин/пароль и 2FA)." >&2
+    rm -f "$tmp_log"
+    return 1
+  fi
+
+  # В выводе spaceauth ищем именно строку export FASTLANE_SESSION='...' (не "Pass the following via the...")
   local env_line
-  env_line="$(grep -E 'FASTLANE_SESSION' "$tmp_log" | tail -n 1 || true)"
+  env_line="$(grep 'export FASTLANE_SESSION=' "$tmp_log" | tail -n 1 || true)"
   rm -f "$tmp_log"
 
   if [[ -z "$env_line" ]]; then
-    echo "   ⚠️  Не удалось найти FASTLANE_SESSION в выводе fastlane spaceauth."
-    echo "       Продолжаем без автосохранения сессии."
+    echo "   ⚠️  Не удалось найти export FASTLANE_SESSION в выводе fastlane spaceauth." >&2
+    echo "       Продолжаем без автосохранения сессии." >&2
     return 0
   fi
 
-  # Уберём префикс export, если он есть, и отрежем всё лишнее после точки с запятой.
-  env_line="${env_line#export }"
+  # Уберём ведущие пробелы и префикс export, отрежем хвост после точки с запятой.
+  env_line="$(echo "$env_line" | sed -E 's/^[[:space:]]*export[[:space:]]+//')"
   env_line="${env_line%%;*}"
 
   if [[ "$env_line" != FASTLANE_SESSION=* ]]; then
-    echo "   ⚠️  Строка с сессией имеет неожиданный формат:"
-    echo "       $env_line"
-    echo "       Продолжаем без автосохранения."
+    echo "   ⚠️  Строка с сессией имеет неожиданный формат:" >&2
+    echo "       $env_line" >&2
+    echo "       Продолжаем без автосохранения." >&2
     return 0
   fi
 
@@ -829,6 +849,7 @@ uploadtool_fastlane_ensure_session() {
   eval "$env_line"
   echo "   ✅ FASTLANE_SESSION обновлён и сохранён в:"
   echo "      $FASTLANE_SESSION_FILE"
+  return 0
 }
 
 echo
@@ -838,7 +859,7 @@ if [[ "${UPLOAD_IOS:-0}" -eq 1 || "${UPLOAD_ANDROID:-0}" -eq 1 ]]; then
   uploadtool_run_cmd_in_dir "$UPLOADTOOL_FASTLANE_ROOT" bundle install --path vendor/bundle
   # После установки fastlane прогоняем интерактивный spaceauth (если актуально),
   # чтобы FASTLANE_SESSION был валиден ещё до фоновых загрузок.
-  uploadtool_fastlane_ensure_session
+  uploadtool_fastlane_ensure_session || exit 1
 else
   echo "   Пропущено: загрузка в сторы выключена"
 fi
