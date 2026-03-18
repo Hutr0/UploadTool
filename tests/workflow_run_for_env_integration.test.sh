@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-TEST_DESCRIPTION="Workflow: run_for_env (подготовка ENV, build numbers, notes, оркестрация)"
+TEST_DESCRIPTION="Workflow: run_for_env (env prep, build numbers, notes, orchestration)"
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPLOAD_TOOL_DIR="$(cd "${TEST_DIR}/.." && pwd)"
@@ -15,6 +15,8 @@ source "${UPLOAD_TOOL_DIR}/lib/env_json.sh"
 source "${UPLOAD_TOOL_DIR}/lib/android_version_code.sh"
 # shellcheck disable=SC1090
 source "${UPLOAD_TOOL_DIR}/lib/notes.sh"
+# shellcheck disable=SC1090
+source "${UPLOAD_TOOL_DIR}/lib/i18n/en.sh"
 # shellcheck disable=SC1090
 source "${UPLOAD_TOOL_DIR}/lib/workflow.sh"
 
@@ -78,20 +80,20 @@ uploadtool_build_and_upload_for_env() {
 
   # should have created per-env dart defines
   env_path="${UPLOAD_STATE_DIR}/dev/dart_defines.json"
-  assert_file_exists "$env_path" "dart_defines.json должен быть создан" || exit 1
+  assert_file_exists "$env_path" "dart_defines.json should be created" || exit 1
 
   got_env="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("APP_ENV",""))' "$env_path" 2>/dev/null || true)"
-  check assert_eq "dev" "$got_env" "APP_ENV должен записаться в dart_defines.json"
+  check assert_eq "dev" "$got_env" "APP_ENV should be written to dart_defines.json"
 
   # should compute ANDROID_BUILD_NUMBER
-  check assert_eq "2026022110" "${ANDROID_BUILD_NUMBER:-}" "ANDROID_BUILD_NUMBER должен считаться как date*100+N"
+  check assert_eq "2026022110" "${ANDROID_BUILD_NUMBER:-}" "ANDROID_BUILD_NUMBER should be date*100+N"
 
   # should set notes for uploads
-  expected_notes=$'Тестовая сборка\n\nHello'
-  check assert_eq "$expected_notes" "${TESTFLIGHT_CHANGELOG:-}" "TESTFLIGHT_CHANGELOG должен формироваться через notes.sh"
+  expected_notes=$'Test build\n\nHello'
+  check assert_eq "$expected_notes" "${TESTFLIGHT_CHANGELOG:-}" "TESTFLIGHT_CHANGELOG should be built via notes.sh"
 
   # should call build+upload orchestration with tag+state_dir
-  check assert_eq "dev ${UPLOAD_STATE_DIR}/dev 1" "${_called}" "должен быть вызван build_and_upload_for_env"
+  check assert_eq "dev ${UPLOAD_STATE_DIR}/dev 1" "${_called}" "build_and_upload_for_env should be called"
 )
 rc=$?
 if [[ "$rc" -ne 0 ]]; then

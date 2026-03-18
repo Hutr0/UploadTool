@@ -1,159 +1,157 @@
 ## Android → Google Play (Flutter + fastlane supply)
 
-В репозитории есть готовый пайплайн, который **собирает Android `.aab`** и **загружает в Google Play Console** (через fastlane supply).
+This repository includes a pipeline that **builds the Android `.aab`** and **uploads it to Google Play Console** (via fastlane supply).
 
-Также поддерживается единый “Upload wizard” (см. `Upload`), который может собрать/загрузить iOS и Android параллельно.
+You can also rely on the unified “Upload wizard” (`Upload` entry point) to run iOS and Android flows side-by-side.
 
-### Разовая настройка (Google)
+### One-time Google setup
 
-1) В Google Play Console:
+1) In Google Play Console:
 
 - **Setup → API access**
-- Привяжи Google Cloud project (если ещё не привязан)
+- Link a Google Cloud project (if not already linked)
 
-2) В Google Cloud Console:
+2) In Google Cloud Console:
 
-- Создай **Service Account**
-- Создай и скачай **JSON key**
+- Create a **Service Account**
+- Create and download the **JSON key**
 
-3) Снова в Play Console:
+3) Back in Play Console:
 
-- Дай service account доступ к аккаунту разработчика / конкретному приложению
-- Выдай права, позволяющие загрузку релизов (например, release manager / upload)
+- Grant the service account access to the developer account / the specific app
+- Assign permissions that allow uploading releases (e.g., Release manager / Upload)
 
-### Локальная конфигурация
+### Local configuration
 
-UploadTool использует **единый** `release.env` (он в `.gitignore`).
+UploadTool relies on a **single** `release.env` file (already gitignored).
 
-Рекомендуемый вариант:
+Recommended location:
 
 - `<flutter_project>/.uploadtool/release.env`
 
-Скопировать заготовку:
+Copy the template:
 
 ```bash
 mkdir -p .uploadtool
 cp /path/to/UploadTool/config/release.env.example .uploadtool/release.env
 ```
 
-Альтернатива (автоматически создаст `.uploadtool/` и разложит шаблоны):
+Alternative (creates `.uploadtool/` and populates templates automatically):
 
 ```bash
 bash /path/to/UploadTool/run.sh init --project-root /path/to/flutter_project
 ```
 
-Если UploadTool подключён как папка `./UploadTool` внутри проекта:
+If UploadTool is vendored as `./UploadTool` inside the Flutter project:
 
 ```bash
 mkdir -p .uploadtool
 cp UploadTool/config/release.env.example .uploadtool/release.env
 ```
 
-Минимальный набор для Google Play:
+Minimum Google Play configuration:
 
-- `PLAY_JSON_KEY_PATH` (путь до JSON ключа service account)
+- `PLAY_JSON_KEY_PATH` (path to the service-account JSON key)
 - `ANDROID_PACKAGE_NAME` (applicationId)
-- `PLAY_TRACK` (рекомендуется `internal`)
+- `PLAY_TRACK` (typically `internal`)
 
-### Запуск
+### Running the wizard
 
-Запустить wizard с Android-target:
+Launch the wizard targeting Android:
 
 ```bash
 ./UploadTool/run.sh android
 ```
 
-Если ты находишься прямо в репозитории UploadTool:
+If you are inside the UploadTool repo itself:
 
 ```bash
 ./run.sh android
 ```
 
-Если UploadTool лежит отдельно:
+If UploadTool is stored elsewhere:
 
 ```bash
 bash /path/to/UploadTool/run.sh --project-root /path/to/flutter_project --config-dir /path/to/flutter_project/.uploadtool android
 ```
 
-Только сборка (без загрузки): в wizard выбери `Upload Android to Google Play? -> n`.
+To build only (skip upload), answer `n` to `Upload Android to Google Play?` inside the wizard.
 
-### Выбор окружения (dev/prod) — через JSON
+### Choosing environment (dev/prod) via JSON
 
-Окружение приложения задаётся через `env.json` в директории конфигов (например `.uploadtool/env.json`).
+Environment is controlled by `env.json` in the config directory (e.g. `.uploadtool/env.json`).
 
-- `APP_ENV`: `dev` или `prod`
-- `BASE_URL`: опционально (если твоё приложение умеет его читать)
+- `APP_ENV`: `dev` or `prod`
+- `BASE_URL`: optional (if your app uses it)
 
-По умолчанию UploadTool обновляет `APP_ENV`. Если в твоём проекте уже используется другой ключ — можно задать:
+UploadTool updates `APP_ENV` by default. If your project uses another key, set:
 
 - `UPLOADTOOL_ENV_JSON_ENV_KEY=...`
 
-Если файла ещё нет, можно создать из примера:
+Need the template?
 
 ```bash
 mkdir -p .uploadtool
 cp /path/to/UploadTool/config/env.json.example .uploadtool/env.json
 ```
 
-Самый простой путь — запускать wizard (`run.sh`): мастер спросит окружение и подготовит per-env файл dart-defines.
+Wizard (`run.sh`) is the easiest way—it will ask for the environment and generate per-env `dart-defines` files.
 
-Важно: непосредственно в `flutter build` UploadTool прокидывает **не общий** `.uploadtool/env.json`, а пер‑окруженческий файл:
+Important: `flutter build` never consumes `.uploadtool/env.json` directly. Instead, UploadTool passes a per-environment file:
 
 - `state/<env>/dart_defines.json`
 
-Он формируется так:
+Generation steps:
 
-- копируется текущий `env.json` (чтобы сохранить остальные ключи, например `BASE_URL`)
-- затем в копии обновляется ключ окружения (`APP_ENV`/`CHOYS_ENV`/или ключ из `UPLOADTOOL_ENV_JSON_ENV_KEY`) под выбранный `dev`/`prod`
+1. Copy the current `env.json` (to keep values like `BASE_URL`).
+2. Update the environment key (`APP_ENV`/`CHOYS_ENV`/custom) inside the copy for the selected `dev`/`prod` value.
 
-Это нужно, чтобы при сборке `dev + prod` две сборки не перетирали общий JSON и не читали “не своё” окружение.
+This protects the shared file when running `dev + prod` sequential builds.
 
-Если выбрано `dev + prod`, wizard выполнит две публикации подряд:
+If `dev + prod` is selected, the wizard performs two uploads in sequence:
 
-- build number используется в формате `YYYYMMDD.N.X`, где `X`: `dev=0`, `prod=1`
-- dev (тестовая сборка) — например `20260220.1.0`
-- prod (релизная сборка) — ядро `YYYYMMDD.N` на 1 больше + суффикс `.1` (пример: dev `20260220.1.0` → prod `20260220.2.1`)
+- Build number format: `YYYYMMDD.N.X`, with `X = 0` for dev and `X = 1` for prod.
+- Example: dev `20260220.1.0` → prod `20260220.2.1` (core increments, suffix switches to `.1`).
 
-### State и retention артефактов
+### State directory and artifacts retention
 
-После сборки `.aab` копируется в:
+Each `.aab` is copied to:
 
 - `state/<env>/artifacts/app-<env>-<BUILD_NUMBER>.aab`
 
-Чтобы `state/` не разрастался, включён retention:
+Retention keeps storage under control:
 
-- хранится только последние `3` `.aab` на окружение (`dev`/`prod`)
-- количество можно изменить переменной `UPLOADTOOL_STATE_ARTIFACTS_KEEP`
+- Only the last **3** `.aab` files per environment are stored (override with `UPLOADTOOL_STATE_ARTIFACTS_KEEP`).
 
-Если собираешь/запускаешь из IDE — добавь в run конфиг Flutter аргумент:
+Running from IDE? Pass:
 
 - `--dart-define-from-file=.uploadtool/env.json`
 
-Если хочешь 1:1 повторить поведение UploadTool для конкретного окружения — используй:
+To reproduce UploadTool’s behavior for a specific environment:
 
 - `--dart-define-from-file=.uploadtool/state/<env>/dart_defines.json`
 
-### Примечание про `versionCode`
+### Note about `versionCode`
 
-Android `versionCode` должен быть **целым числом**.
+Android `versionCode` must be an **integer**.
 
-В этом проекте логика такая:
+Project logic:
 
-- если задан `ANDROID_BUILD_NUMBER` — используем его
-- иначе берём `BUILD_NUMBER` (или, если его нет, build-number из `pubspec.yaml`)
-- и **удаляем все нецифровые символы** (пример: `20260220.4` → `202602204`)
+- If `ANDROID_BUILD_NUMBER` is provided — use it.
+- Otherwise derive from `BUILD_NUMBER` (or from `pubspec.yaml`).
+- Remove every non-digit character (e.g., `20260220.4` → `202602204`).
 
-Важно: если build number в формате `YYYYMMDD.N.X`, то для Android `versionCode` берётся **только ядро** `YYYYMMDD.N` (суффикс `.X` игнорируется), чтобы `versionCode` гарантированно оставался в диапазоне `int`.
+Important: when using the `YYYYMMDD.N.X` format, Android `versionCode` takes **only the core** `YYYYMMDD.N` (suffix `.X` is ignored) to guarantee it stays within the 32-bit range.
 
-### Имя релиза в Google Play (Release name)
+### Google Play release name
 
-При загрузке fastlane/supply выставляет **имя релиза** (в Play Console) через `version_name`.
+When uploading, fastlane/supply sets the **release name** in Play Console via `version_name`.
 
-По умолчанию оно формируется так:
+Default format:
 
-- `"<BUILD_NAME> | <BUILD_NUMBER> | <dev/prod>"` (пример: `3.8.3 | 20260220.2.1 | prod`)
+- `"<BUILD_NAME> | <BUILD_NUMBER> | <dev/prod>"` (example: `3.8.3 | 20260220.2.1 | prod`)
 
-Если нужно переопределить вручную:
+Override manually if needed:
 
-- `SUPPLY_VERSION_NAME="..."` (или `PLAY_RELEASE_NAME="..."`)
+- `SUPPLY_VERSION_NAME="..."` (or `PLAY_RELEASE_NAME="..."`)
 

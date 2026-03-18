@@ -1,183 +1,183 @@
-## Интеграция UploadTool в новый Flutter‑проект
+## Integrating UploadTool into a new Flutter project
 
-Ниже — два равноправных сценария подключения UploadTool:
+There are two equivalent ways to connect UploadTool to a project:
 
-- как папка `./UploadTool` внутри проекта (обычно через `git submodule`)
-- как отдельный репозиторий в любом месте на диске
+- as an `./UploadTool` folder inside the Flutter project (usually via `git submodule`)
+- as a separate repository anywhere on disk
 
-Во всех сценариях рекомендуется хранить конфиги рядом с проектом, в `.uploadtool/` (и добавить эту папку в `.gitignore`).
+In all scenarios it is recommended to keep configs next to the project in `.uploadtool/` (and add that folder to `.gitignore`).
 
-### 1) Быстрый старт через интерактивный `init.sh` (рекомендуется)
+### 1) Quick start via interactive `init.sh` (recommended)
 
-Основной способ настройки UploadTool — интерактивный wizard:
+The primary setup path is the interactive wizard:
 
 ```bash
 bash /path/to/UploadTool/init.sh
 ```
 
-Он задаст вопросы (проект, директория конфигов, ключ окружения для `env.json`, базовые идентификаторы приложения) и создаст `.uploadtool/`.
+It will ask questions (project path, config directory, `env.json` key, base app identifiers) and create `.uploadtool/`.
 
-### 2) Скриптовый режим через `run.sh init` (дополнительно)
+### 2) Scripted mode via `run.sh init` (optional)
 
-`run.sh init` (или `run.sh setup`) создаёт директорию конфигов и копирует шаблоны:
+`run.sh init` (or `run.sh setup`) creates the config directory and copies templates:
 
 - `env.json`
 - `release.env`
 - `wizard.env`
 
-Пример для отдельного репозитория:
+Example for a standalone repository:
 
 ```bash
 bash /path/to/UploadTool/run.sh init --project-root /path/to/flutter_project
 ```
 
-Пример для случая, когда UploadTool лежит внутри проекта:
+Example when UploadTool is inside the project:
 
 ```bash
 ./UploadTool/run.sh init --project-root .
 ```
 
-Флаги `init`:
+`init` flags:
 
-- `--config-dir <path>`: куда создать конфиги (по умолчанию `<project>/.uploadtool`)
-- `--force`: перезаписать существующие файлы (`env.json`, `release.env`, `wizard.env`)
-- `--save-defaults`: сохранить дефолты CLI в `cli.env` (по умолчанию в `<config-dir>/cli.env`, см. ниже)
+- `--config-dir <path>`: where to create configs (defaults to `<project>/.uploadtool`)
+- `--force`: overwrite existing files (`env.json`, `release.env`, `wizard.env`)
+- `--save-defaults`: save CLI defaults into `cli.env` (defaults to `<config-dir>/cli.env`, see below)
 
-После `init` нужно открыть и заполнить:
+After `init` you must open and fill:
 
 - `<project>/.uploadtool/release.env`
 
-### 3) (Опционально) сохранить дефолты CLI в `cli.env`
+### 3) (Optional) save CLI defaults into `cli.env`
 
-Чтобы не передавать каждый раз `--project-root` и `--config-dir`, можно сохранить дефолты:
+To avoid passing `--project-root` and `--config-dir` every time, you can save defaults:
 
 ```bash
 bash /path/to/UploadTool/run.sh init --project-root /path/to/flutter_project --save-defaults
 ```
 
-По умолчанию файл создаётся в:
+By default the file is created at:
 
-- `<flutter_project>/.uploadtool/cli.env` (или в той директории, которую ты задал через `--config-dir`)
+- `<flutter_project>/.uploadtool/cli.env` (or at the directory you chose via `--config-dir`)
 
-Legacy (глобальный) вариант:
+Legacy (global) variant:
 
 - `~/.uploadtool/cli.env`
 
-Переопределить путь можно:
+You can override the path via:
 
-- флагом `--cli-env-file /path/to/cli.env`
-- переменной окружения `UPLOADTOOL_CLI_ENV_FILE=/path/to/cli.env`
+- flag `--cli-env-file /path/to/cli.env`
+- env `UPLOADTOOL_CLI_ENV_FILE=/path/to/cli.env`
 
-Пример формата:
+Example format:
 
 - `config/cli.env.example`
 
-### Несколько проектов (profiles)
+### Multiple projects (profiles)
 
-Если один UploadTool используется для нескольких приложений, можно сохранить проекты в реестр:
+If one UploadTool instance is used for multiple apps, you can save projects into a registry:
 
 - `~/.uploadtool/projects/<name>.env`
 
-И выбирать нужный проект при запуске:
+and choose the desired project when running:
 
 ```bash
 bash /path/to/UploadTool/run.sh --project <name>
 ```
 
-### 4) Сценарий A: UploadTool как `git submodule` (внутри проекта)
+### 4) Scenario A: UploadTool as a `git submodule` (inside the project)
 
-Рекомендуемая структура:
+Recommended structure:
 
 ```text
 <flutter_project>/
   UploadTool/          # git submodule
-  .uploadtool/         # конфиги (gitignored)
+  .uploadtool/         # configs (gitignored)
 ```
 
-Подключение:
+Add submodule:
 
 ```bash
 git submodule add <repo_url> UploadTool
 ```
 
-Инициализация (рекомендуется):
+Initialization (recommended):
 
 ```bash
 bash ./UploadTool/init.sh
 ```
 
-Инициализация (скриптом, дополнительно):
+Initialization (scripted, optional):
 
 ```bash
 ./UploadTool/run.sh init --project-root .
 ```
 
-Запуск мастера:
+Running the wizard:
 
 ```bash
 ./UploadTool/run.sh
 ```
 
-### 5) Сценарий B: UploadTool как отдельный репозиторий
+### 5) Scenario B: UploadTool as a separate repository
 
-Пример:
+Example:
 
 ```text
-~/Tools/UploadTool/     # отдельный репозиторий
-~/Projects/MyApp/       # Flutter проект
+~/Tools/UploadTool/     # separate repository
+~/Projects/MyApp/       # Flutter project
 ```
 
-Инициализация (рекомендуется):
+Initialization (recommended):
 
 ```bash
 bash ~/Tools/UploadTool/init.sh
 ```
 
-Инициализация (скриптом, дополнительно):
+Initialization (scripted, optional):
 
 ```bash
 bash ~/Tools/UploadTool/run.sh init --project-root ~/Projects/MyApp
 ```
 
-Запуск мастера:
+Running the wizard:
 
 ```bash
 bash ~/Tools/UploadTool/run.sh --project-root ~/Projects/MyApp --config-dir ~/Projects/MyApp/.uploadtool
 ```
 
-Или (если сохранены дефолты через `--save-defaults`):
+Or (if defaults were saved via `--save-defaults`):
 
 ```bash
 bash ~/Tools/UploadTool/run.sh
 ```
 
-### 6) Про `.uploadtool/` и gitignore
+### 6) About `.uploadtool/` and gitignore
 
-В `.uploadtool/` обычно лежит:
+Typically `.uploadtool/` contains:
 
-- `release.env` (секреты/ключи, не коммитить)
-- `wizard.env` (опционально)
-- `env.json` (dart-defines)
-- `logs/` и `state/` (runtime‑артефакты)
+- `release.env` (secrets/keys, should not be committed)
+- `wizard.env` (optional)
+- `env.json` (dart‑defines)
+- `logs/` and `state/` (runtime artifacts)
 
-По умолчанию логи и state создаются **рядом с конфигами**:
+By default logs and state are created **next to configs**:
 
-- `UPLOAD_LOG_DIR`: `<config-dir>/logs` (переопределяется через `UPLOADTOOL_LOG_DIR`)
-- `UPLOAD_STATE_DIR`: `<config-dir>/state` (переопределяется через `UPLOADTOOL_STATE_DIR`)
+- `UPLOAD_LOG_DIR`: `<config-dir>/logs` (override via `UPLOADTOOL_LOG_DIR`)
+- `UPLOAD_STATE_DIR`: `<config-dir>/state` (override via `UPLOADTOOL_STATE_DIR`)
 
-Для сборок мастер создаёт per-env файл dart-defines:
+For builds the wizard creates a per‑env dart‑defines file:
 
 - `<config-dir>/state/<env>/dart_defines.json`
 
-Он формируется копированием `<config-dir>/env.json` + обновлением ключа окружения (`APP_ENV`/`CHOYS_ENV`/или ключ из `UPLOADTOOL_ENV_JSON_ENV_KEY`).
+It is formed by copying `<config-dir>/env.json` and then updating the environment key (`APP_ENV` / `CHOYS_ENV` / key from `UPLOADTOOL_ENV_JSON_ENV_KEY`).
 
-Артефакты сборок копируются в:
+Artifacts are copied to:
 
 - `<config-dir>/state/<env>/artifacts/`
 
-И автоматически чистятся (retention): хранится только последние `3` `.ipa` и последние `3` `.aab` на окружение. Количество можно изменить через `UPLOADTOOL_STATE_ARTIFACTS_KEEP`.
+And are automatically cleaned up (retention): only the last `3` `.ipa` and last `3` `.aab` per environment are kept. You can change this via `UPLOADTOOL_STATE_ARTIFACTS_KEEP`.
 
-Рекомендуется добавить в `.gitignore` проекта:
+Recommended `.gitignore` entry:
 
 ```gitignore
 .uploadtool/

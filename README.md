@@ -1,60 +1,60 @@
-# UploadTool
+## UploadTool
 
-Единый модуль для сборки и загрузки релизов iOS/Android.
+A single module for building and uploading iOS/Android releases.
 
-UploadTool задуман как **автономный** модуль:
+UploadTool is designed as an **autonomous** module:
 
-- его можно держать прямо внутри Flutter‑проекта, как сейчас
-- или вынести в отдельный репозиторий и подключать к разным проектам
+- you can keep it directly inside a Flutter project
+- or keep it in a separate repository and connect it to different projects
 
-## Запуск
+### Run
 
-### Если UploadTool лежит внутри проекта
+#### If UploadTool is inside the project
 
-- Из корня проекта: `./Upload`
-- Напрямую:
+- From project root: `./Upload`
+- Directly:
   - `./UploadTool/run.sh`
   - `./UploadTool/run.sh ios`
   - `./UploadTool/run.sh android`
   - `./UploadTool/run.sh both`
 
-### Если UploadTool лежит отдельно (в другом месте/репозитории)
+#### If UploadTool is in a separate directory / repository
 
-Тогда надо явно указать корень Flutter‑проекта и (желательно) папку с конфигами:
+Then you must explicitly pass the Flutter project root and (optionally) the config directory:
 
 ```bash
 bash /path/to/UploadTool/run.sh --project-root /path/to/flutter_project --config-dir /path/to/flutter_project/.uploadtool
 ```
 
-Короткая версия (если ты уже находишься в корне Flutter‑проекта):
+Short version (when you are already in the Flutter project root):
 
 ```bash
 bash /path/to/UploadTool/run.sh --project-root . --config-dir ./.uploadtool
 ```
 
-UploadTool сам:
+UploadTool will:
 
-- найдёт корень проекта по `pubspec.yaml` (если не задан `--project-root`)
-- возьмёт конфиги из `--config-dir` / `UPLOADTOOL_CONFIG_DIR` (если задано)
-- иначе использует `${PROJECT}/.uploadtool` (и создаст директорию при необходимости)
-- если Flutter‑проект не определён — использует `config/` рядом с `run.sh`
+- detect the project root via `pubspec.yaml` (if `--project-root` is not provided)
+- read configs from `--config-dir` / `UPLOADTOOL_CONFIG_DIR` (if provided)
+- otherwise use `${PROJECT}/.uploadtool` (and create it when needed)
+- if no Flutter project is detected — fall back to `config/` next to `run.sh`
 
-## Быстрый старт (инициализация проекта)
+### Quick start (project initialization)
 
-Чтобы быстро и интерактивно настроить UploadTool для проекта (создать `.uploadtool/`, разложить шаблоны, проставить базовые значения и, при желании, сохранить профиль проекта):
+To quickly and interactively configure UploadTool for a project (create `.uploadtool/`, copy templates, set base values and optionally save a project profile):
 
 ```bash
 bash /path/to/UploadTool/init.sh
 ```
 
-Этот wizard:
+This wizard will:
 
-- спрашивает путь к Flutter‑проекту и директории конфигов
-- создаёт `env.json`, `release.env`, `wizard.env` (с возможностью не перезаписывать существующие файлы)
-- по желанию создаёт `cli.env` с дефолтными путями
-- по желанию сохраняет проект в реестр (profile), чтобы потом запускать через `--project <name>`
+- ask for the Flutter project path and config directory
+- create `env.json`, `release.env`, `wizard.env` (without overwriting existing files unless forced)
+- optionally create `cli.env` with default paths
+- optionally save the project profile so you can later run via `--project <name>`
 
-Если хочется сделать то же самое скриптом (без опросника) — есть команда `run.sh init`:
+If you want the same but scripted (no interactive questions), use `run.sh init`:
 
 ```bash
 bash /path/to/UploadTool/run.sh init \
@@ -65,30 +65,30 @@ bash /path/to/UploadTool/run.sh init \
   --force
 ```
 
-Основные флаги для `run.sh init`:
+Main flags for `run.sh init`:
 
-- `--project-root` — где лежит `pubspec.yaml`
-- `--config-dir` — куда складывать `env.json` / `release.env` / `wizard.env`
-- `--cli-env-file` — явный путь к `cli.env` (по умолчанию `<config_dir>/cli.env`)
-- `--save-defaults` / `--no-save-defaults` — сохранять ли `cli.env`
-- `--force` / `--no-force` — перезаписывать ли уже существующие файлы
+- `--project-root` — where `pubspec.yaml` is located
+- `--config-dir` — where to create `env.json` / `release.env` / `wizard.env`
+- `--cli-env-file` — explicit path to `cli.env` (defaults to `<config_dir>/cli.env`)
+- `--save-defaults` / `--no-save-defaults` — whether to save `cli.env`
+- `--force` / `--no-force` — whether to overwrite existing files
 
-Рекомендуемый `cli.env` (локально для проекта): `<flutter_project>/.uploadtool/cli.env`.
+Recommended `cli.env` (project-local): `<flutter_project>/.uploadtool/cli.env`.
 
-Legacy (глобальный) вариант: `~/.uploadtool/cli.env`.
+Legacy (global) variant: `~/.uploadtool/cli.env`.
 
-Пример формата:
+Example format:
 
 - `config/cli.env.example`
 
-При запуске `run.sh` используется следующий приоритет для `cli.env`:
+When `run.sh` starts, `cli.env` is resolved using this priority:
 
-1. Файл, переданный через `--cli-env-file`
-2. Файл из `UPLOADTOOL_CLI_ENV_FILE`
+1. File passed via `--cli-env-file`
+2. File from `UPLOADTOOL_CLI_ENV_FILE`
 3. `<project>/.uploadtool/cli.env`
 4. `~/.uploadtool/cli.env`
 
-Через `cli.env` можно задать:
+Through `cli.env` you can set:
 
 ```bash
 UPLOADTOOL_CLI_PROJECT_ROOT="/path/to/flutter_project"
@@ -97,69 +97,69 @@ UPLOADTOOL_CLI_FASTLANE_ROOT="/path/to/fastlane"
 UPLOADTOOL_CLI_ENV_JSON_ENV_KEY="APP_ENV"
 ```
 
-После настройки `cli.env` достаточно вызывать:
+After `cli.env` is configured, you can simply run:
 
 ```bash
 bash /path/to/UploadTool/run.sh
 ```
 
-без постоянного прокидывания `--project-root` / `--config-dir`.
+without passing `--project-root` / `--config-dir` each time.
 
-## Параметры CLI
+### CLI parameters (`run.sh`)
 
-Ниже перечислены основные флаги `run.sh` (кроме отдельного `init.sh`‑wizard).
+Below are the main `run.sh` flags (besides the separate `init.sh` wizard).
 
 - `--project-root /path/to/flutter_project`  
-  Явно задаёт корень Flutter‑проекта (где `pubspec.yaml`). Если не указан, UploadTool попробует:
-  - взять путь из профиля (`--project <name>`)
-  - или папку рядом с UploadTool, в которой есть `pubspec.yaml`
-  - или текущую директорию, если в ней есть `pubspec.yaml`.
+  Explicitly sets the Flutter project root (where `pubspec.yaml` is). If omitted, UploadTool will try:
+  - the path from a profile (`--project <name>`)
+  - a directory next to UploadTool that contains `pubspec.yaml`
+  - the current directory if it contains `pubspec.yaml`
 
 - `--config-dir /path/to/config_dir`  
-  Явно задаёт директорию конфигов (`env.json`, `release.env`, `wizard.env`, логи и state).  
-  Если не указан, используется:
-  - `UPLOADTOOL_CONFIG_DIR` / `UPLOADTOOL_CLI_CONFIG_DIR`, либо
-  - `<project_root>/.uploadtool` по умолчанию.
+  Explicitly sets the config directory (`env.json`, `release.env`, `wizard.env`, logs, state).  
+  If omitted, UploadTool uses:
+  - `UPLOADTOOL_CONFIG_DIR` / `UPLOADTOOL_CLI_CONFIG_DIR`, or
+  - `<project_root>/.uploadtool` by default.
 
 - `--env-file /path/to/release.env`  
-  Явно указывает, какой `release.env` использовать (если файлов несколько).
+  Explicitly chooses which `release.env` file to use (if there are multiple).
 
 - `--env-json-env-key KEY` / `--env-key KEY`  
-  Явно задаёт ключ окружения в `env.json` (по умолчанию `APP_ENV`, fallback на `CHOYS_ENV`).  
-  Эквивалентно переменной `UPLOADTOOL_ENV_JSON_ENV_KEY`.
+  Explicitly sets the environment key inside `env.json` (default is `APP_ENV`, fallback to `CHOYS_ENV`).  
+  Equivalent to the `UPLOADTOOL_ENV_JSON_ENV_KEY` variable.
 
 - `--fastlane-root /path/to/fastlane`  
-  Переопределяет директорию fastlane.  
-  По умолчанию:
-  - `UploadTool/fastlane`, если там есть `Gemfile`
-  - иначе `ios/` внутри Flutter‑проекта (обратная совместимость со старыми проектами).
+  Overrides the fastlane directory.  
+  Defaults to:
+  - `UploadTool/fastlane` when it has a `Gemfile`
+  - otherwise `ios/` inside the Flutter project (backwards‑compatible)
 
 - `--project NAME`  
-  Выбрать сохранённый профиль проекта (создаётся через `init.sh`).  
-  Профиль задаёт `project_root`, `config_dir`, `fastlane_root` и ключ для `env.json`.
+  Choose a saved project profile (created via `init.sh`).  
+  The profile sets `project_root`, `config_dir`, `fastlane_root` and the `env.json` key.
 
 - `--cli-env-file /path/to/cli.env`  
-  Явно указать файл `cli.env`, откуда брать дефолты для `project_root`, `config_dir`, `fastlane_root` и ключа `env.json`.
+  Explicitly point to `cli.env` where defaults for `project_root`, `config_dir`, `fastlane_root` and the `env.json` key are stored.
 
-## Несколько проектов (profiles)
+### Multiple projects (profiles)
 
-Если один UploadTool используется для нескольких приложений, можно сохранить проекты в реестр (через `init.sh`) и выбирать при запуске:
+If one UploadTool instance is used for several apps, you can save projects into a registry (via `init.sh`) and select them at runtime:
 
 ```bash
 bash /path/to/UploadTool/run.sh --project my_app
 ```
 
-## Структура
+### Structure
 
-- `run.sh` — интерактивный wizard
-- `config/` — примеры и дефолтные конфиги (секреты не коммитим)
-- `docs/` — документация по релизам
-- `logs/` — runtime-логи wizard (по умолчанию рядом с конфигами)
-- `state/` — runtime-state и копии артефактов (по умолчанию рядом с конфигами)
+- `run.sh` — interactive release wizard
+- `config/` — examples and default configs (secrets are not committed)
+- `docs/` — release documentation
+- `logs/` — runtime logs (by default next to configs)
+- `state/` — runtime state and copies of artifacts (by default next to configs)
 
-## Конфиги (рекомендуемый вариант)
+### Configs (recommended layout)
 
-Чтобы подключать UploadTool к разным проектам бесшовно, удобно держать конфиги **рядом с проектом**, в папке `.uploadtool/` (и добавить её в `.gitignore`):
+To connect UploadTool seamlessly to different projects, keep configs **next to the project**, in a `.uploadtool/` folder (and add it to `.gitignore`):
 
 ```text
 <flutter_project>/
@@ -169,50 +169,74 @@ bash /path/to/UploadTool/run.sh --project my_app
     env.json
 ```
 
-Примеры для копирования:
+Examples to copy from:
 
 - `config/release.env.example`
 - `config/wizard.env.example`
 - `config/env.json.example`
+- `config/i18n.env.example`
 
-### env.json (dart-defines)
+#### `env.json` (dart‑defines)
 
-По умолчанию UploadTool обновляет в `env.json` ключ `APP_ENV` (`dev`/`prod`).
+By default, UploadTool updates the `APP_ENV` key in `env.json` (`dev` / `prod`).
 
-Если в проекте уже используется другой ключ окружения:
+If your project already uses a different environment key:
 
-- если файл содержит `CHOYS_ENV` (и не содержит `APP_ENV`) — UploadTool продолжит обновлять `CHOYS_ENV`
-- или можно явно указать ключ через `UPLOADTOOL_ENV_JSON_ENV_KEY`
+- if the file contains `CHOYS_ENV` and not `APP_ENV` — UploadTool will keep updating `CHOYS_ENV`
+- or you can explicitly set the key via `UPLOADTOOL_ENV_JSON_ENV_KEY`
 
-## Fastlane
+### Fastlane
 
-Fastlane‑настройки теперь живут **внутри UploadTool**:
+Fastlane configuration now lives **inside UploadTool**:
 
 - `fastlane/Gemfile`
 - `fastlane/fastlane/Fastfile`
 - `fastlane/fastlane/Appfile`
 
-По умолчанию корнем fastlane считается:
+By default, the fastlane root is:
 
-1. `UploadTool/fastlane`, если там есть `Gemfile`
-2. иначе `ios/` внутри Flutter‑проекта (обратная совместимость со старыми проектами)
+1. `UploadTool/fastlane` when it has a `Gemfile`
+2. otherwise `ios/` inside the Flutter project (backwards‑compatible)
 
-По этому пути `run.sh` делает `bundle install`.
+`run.sh` will run `bundle install` in this fastlane root.
 
-При необходимости можно явно задать fastlane‑root:
+You can override fastlane root via:
 
-- через переменную `UPLOADTOOL_FASTLANE_ROOT=/path/to/ios_or_fastlane`
-- или через флаг `--fastlane-root /path/to/ios_or_fastlane`
+- env `UPLOADTOOL_FASTLANE_ROOT=/path/to/ios_or_fastlane`
+- flag `--fastlane-root /path/to/ios_or_fastlane`
 
-Во время запуска UploadTool показывает выбранный путь:
+At startup UploadTool prints the chosen fastlane path:
 
 ```text
 Fastlane:/path/to/some/fastlane
 ```
 
-## Документация
+### Localization (i18n)
 
-- Релиз‑мастер: `docs/release_wizard.md`
-- Интеграция (submodule/отдельный repo): `docs/integration_guide.md`
-- iOS/TestFlight: `docs/testflight.md`
-- Android/Google Play: `docs/google_play.md`
+UploadTool supports localized CLI messages (wizards in `run.sh` and `init.sh`):
+
+- supported languages:
+  - `en` — English (default)
+  - `ru` — Russian
+- language can be chosen via:
+  - env var `UPLOADTOOL_LANG`, or
+  - config file `<config_dir>/i18n.env` (see `config/i18n.env.example`)
+
+Priority:
+
+1. `UPLOADTOOL_LANG` environment variable
+2. file from `UPLOADTOOL_I18N_ENV_FILE` (if provided)
+3. `<config_dir>/i18n.env`
+4. fallback to `en`
+
+The actual messages are defined in:
+
+- `lib/i18n/en.sh`
+- `lib/i18n/ru.sh`
+
+### Documentation
+
+- Release wizard: `docs/release_wizard.md`
+- Integration (submodule / separate repo): `docs/integration_guide.md`
+- iOS / TestFlight: `docs/testflight.md`
+- Android / Google Play: `docs/google_play.md`
