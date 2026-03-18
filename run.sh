@@ -960,7 +960,7 @@ fi
 # Update pubspec when at least one upload succeeds to avoid losing version bumps.
 if [[ "$UPLOAD_IOS" -eq 1 || "$UPLOAD_ANDROID" -eq 1 ]]; then
   if at_least_one_upload_succeeded; then
-    local update_reason="$MSG_RUN_PUBSPEC_REASON_ALL_SUCCESS"
+    update_reason="$MSG_RUN_PUBSPEC_REASON_ALL_SUCCESS"
     [[ "$UPLOAD_OR_BUILD_FAILED" -eq 1 ]] && update_reason="$MSG_RUN_PUBSPEC_REASON_PARTIAL_SUCCESS"
     if [[ "$ENV_TARGETS" == "both" ]]; then
       update_pubspec_version "$PROD_BUILD_NUMBER" "$update_reason"
