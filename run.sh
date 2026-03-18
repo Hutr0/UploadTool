@@ -26,6 +26,7 @@ ENV_FILE="${ENV_FILE:-}"
 
 INIT_FORCE="${UPLOADTOOL_INIT_FORCE:-0}"
 INIT_SAVE_DEFAULTS="${UPLOADTOOL_INIT_SAVE_DEFAULTS:-0}"
+INIT_LANG="${UPLOADTOOL_INIT_LANG:-}"
 
 declare -a PARSED_REST=()
 parse_cli_overrides() {
@@ -67,6 +68,10 @@ parse_cli_overrides() {
         INIT_SAVE_DEFAULTS="0"
         shift 1
         ;;
+      --lang)
+        INIT_LANG="${2:-}"
+        shift 2
+        ;;
       --force)
         INIT_FORCE="1"
         shift 1
@@ -89,6 +94,7 @@ uploadtool_write_cli_env_file() {
   local config_dir="$3"
   local fastlane_root="${4:-}"
   local env_key="${5:-}"
+  local lang="${6:-}"
 
   local dir_name
   dir_name="$(dirname "$file_path")"
@@ -105,6 +111,20 @@ EOF
   if [[ -n "$env_key" ]]; then
     printf '%s\n' "UPLOADTOOL_CLI_ENV_JSON_ENV_KEY=\"$env_key\"" >>"$file_path"
   fi
+  if [[ -n "$lang" ]]; then
+    printf '%s\n' "UPLOADTOOL_LANG=\"$lang\"" >>"$file_path"
+  fi
+}
+
+uploadtool_write_i18n_env_file() {
+  local file_path="$1"
+  local lang="$2"
+
+  local dir_name
+  dir_name="$(dirname "$file_path")"
+  mkdir -p "$dir_name"
+
+  printf 'UPLOADTOOL_LANG=%s\n' "$lang" >"$file_path"
 }
 
 uploadtool_cli_init() {
@@ -153,6 +173,18 @@ uploadtool_cli_init() {
     return 1
   fi
 
+  local init_lang
+  init_lang="${INIT_LANG:-${UPLOADTOOL_LANG:-en}}"
+  init_lang="$(printf '%s' "$init_lang" | tr '[:upper:]' '[:lower:]')"
+  case "$init_lang" in
+    ru)
+      init_lang="ru"
+      ;;
+    *)
+      init_lang="en"
+      ;;
+  esac
+
   echo
   echo "🧰 UploadTool init"
   echo "   Project: $project_root"
@@ -174,6 +206,8 @@ uploadtool_cli_init() {
   _copy_example "$src_dir/env.json.example" "$config_dir/env.json" "env.json"
   _copy_example "$src_dir/release.env.example" "$config_dir/release.env" "release.env"
   _copy_example "$src_dir/wizard.env.example" "$config_dir/wizard.env" "wizard.env"
+  uploadtool_write_i18n_env_file "$config_dir/i18n.env" "$init_lang"
+  printf "$MSG_RUN_INIT_I18N_SAVED\n" "$config_dir/i18n.env"
 
   if [[ "${INIT_SAVE_DEFAULTS:-0}" == "1" ]]; then
     local cli_file
@@ -186,7 +220,7 @@ uploadtool_cli_init() {
       return 1
     fi
 
-    uploadtool_write_cli_env_file "$cli_file" "$project_root" "$config_dir" "${FASTLANE_ROOT_ARG:-}" "${UPLOADTOOL_ENV_JSON_ENV_KEY:-}"
+    uploadtool_write_cli_env_file "$cli_file" "$project_root" "$config_dir" "${FASTLANE_ROOT_ARG:-}" "${UPLOADTOOL_ENV_JSON_ENV_KEY:-}" "$init_lang"
     printf "$MSG_RUN_INIT_CLI_DEFAULTS_SAVED\n" "$cli_file"
   fi
 

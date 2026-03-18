@@ -53,6 +53,7 @@ mkdir -p "$HOME"
     "n" \
     "y" \
     "" \
+    "en" \
     "y" \
     "" \
     "y" \
@@ -70,6 +71,7 @@ assert_dir_exists "${project_dir}/.uploadtool" ".uploadtool should be created" |
 assert_file_exists "${project_dir}/.uploadtool/env.json" "env.json should be created" || _failed=1
 assert_file_exists "${project_dir}/.uploadtool/release.env" "release.env should be created" || _failed=1
 assert_file_exists "${project_dir}/.uploadtool/wizard.env" "wizard.env should be created" || _failed=1
+assert_file_exists "${project_dir}/.uploadtool/i18n.env" "i18n.env should be created" || _failed=1
 
 # env.json should contain APP_ENV=dev
 if ! grep -q '"APP_ENV"[[:space:]]*:[[:space:]]*"dev"' "${project_dir}/.uploadtool/env.json"; then
@@ -90,6 +92,11 @@ fi
 # cli.env should be created under project config dir
 cli_env_path="${project_dir}/.uploadtool/cli.env"
 assert_file_exists "$cli_env_path" "cli.env should be created" || _failed=1
+
+if ! grep -q '^UPLOADTOOL_LANG="\?en"\?$' "${project_dir}/.uploadtool/i18n.env"; then
+  echo "UPLOADTOOL_LANG=en not set in i18n.env" >&2
+  _failed=1
+fi
 
 if ! grep -q "^UPLOADTOOL_CLI_PROJECT_ROOT=\"${project_dir}\"$" "$cli_env_path"; then
   echo "UPLOADTOOL_CLI_PROJECT_ROOT not saved in cli.env" >&2

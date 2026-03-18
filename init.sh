@@ -195,6 +195,24 @@ if [[ "$save_defaults" -eq 1 ]]; then
   fi
 fi
 
+def_language="${UPLOADTOOL_LANG:-en}"
+language="$(prompt "$MSG_INIT_PROMPT_LANGUAGE" "$def_language")"
+language="$(echo "$language" | tr '[:upper:]' '[:lower:]')"
+case "$language" in
+  en|ru)
+    ;;
+  "")
+    language="en"
+    ;;
+  *)
+    echo "$MSG_INIT_ERR_LANGUAGE_INVALID" >&2
+    exit 1
+    ;;
+esac
+
+export UPLOADTOOL_LANG="$language"
+uploadtool_i18n_init
+
 profiles_dir="$(uploadtool_profiles_dir)"
 save_profile="0"
 if [[ -n "$profiles_dir" ]]; then
@@ -247,6 +265,7 @@ printf "$MSG_INIT_SUMMARY_ENV_KEY\n" "$env_key" "$app_env"
 [[ -n "$base_url" ]] && printf "$MSG_INIT_SUMMARY_BASE_URL\n" "$base_url"
 [[ -n "$ios_app_id" ]] && printf "$MSG_INIT_SUMMARY_IOS_APP_ID\n" "$ios_app_id"
 [[ -n "$android_pkg" ]] && printf "$MSG_INIT_SUMMARY_ANDROID_PKG\n" "$android_pkg"
+printf "$MSG_INIT_SUMMARY_LANGUAGE\n" "$language"
 if [[ "$save_defaults" -eq 1 ]]; then
   printf "$MSG_INIT_SUMMARY_CLI_ENV\n" "$cli_env_file"
 fi
@@ -266,7 +285,7 @@ fi
 echo
 echo "$MSG_INIT_RUNNING"
 
-args=("init" "--project-root" "$project_root" "--config-dir" "$config_dir" "--fastlane-root" "$fastlane_root" "--env-key" "$env_key")
+args=("init" "--project-root" "$project_root" "--config-dir" "$config_dir" "--fastlane-root" "$fastlane_root" "--env-key" "$env_key" "--lang" "$language")
 if [[ "$force_overwrite" -eq 1 ]]; then
   args+=("--force")
 else
@@ -302,12 +321,22 @@ if [[ -n "$android_pkg" ]]; then
   set_dotenv_var "$release_env_path" "ANDROID_PACKAGE_NAME" "$android_pkg"
 fi
 
+i18n_env_path="$config_dir/i18n.env"
+if [[ -f "$i18n_env_path" ]]; then
+  :
+else
+  cat >"$i18n_env_path" <<EOF
+UPLOADTOOL_LANG=$language
+EOF
+fi
+
 echo
 echo "$MSG_INIT_DONE_TITLE"
 echo "$MSG_INIT_DONE_FILES_HEADER"
 printf "$MSG_INIT_DONE_ENV_JSON\n" "$config_dir"
 printf "$MSG_INIT_DONE_RELEASE_ENV\n" "$config_dir"
 printf "$MSG_INIT_DONE_WIZARD_ENV\n" "$config_dir"
+printf "$MSG_INIT_DONE_I18N_ENV\n" "$config_dir"
 
 if [[ "$save_defaults" -eq 1 ]]; then
   printf "$MSG_INIT_DONE_CLI_ENV\n" "$cli_env_file"
