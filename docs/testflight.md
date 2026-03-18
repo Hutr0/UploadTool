@@ -1,197 +1,194 @@
 ## iOS → TestFlight (Flutter + fastlane)
 
-В репозитории есть готовый пайплайн, который **собирает iOS `.ipa`** и **загружает в TestFlight**.
+This repository ships with a ready-to-use pipeline that **builds the iOS `.ipa`** and **uploads it to TestFlight**.
 
-Также поддерживается единый “Upload wizard” (см. `Upload`), который может собрать/загрузить iOS и Android параллельно.
+You can run it either directly or through the unified “Upload wizard” (`Upload` entry point) that orchestrates iOS and Android builds in parallel.
 
-### Быстрый старт (iOS)
+### Quick start (iOS)
 
-#### 1) Подготовь конфиги
+#### 1) Prepare the configs
 
-UploadTool читает настройки из **одного** файла: `release.env`.
+UploadTool reads everything from **one** file: `release.env`.
 
-Рекомендуемый вариант (удобно для подключения к разным проектам):
+Recommended location (works well when sharing UploadTool across multiple apps):
 
 - `<flutter_project>/.uploadtool/release.env`
 
-Скопировать заготовку:
+Copy the template:
 
 ```bash
 mkdir -p .uploadtool
 cp /path/to/UploadTool/config/release.env.example .uploadtool/release.env
 ```
 
-Альтернатива (автоматически создаст `.uploadtool/` и разложит шаблоны):
+Alternative (creates `.uploadtool/` and populates all templates automatically):
 
 ```bash
 bash /path/to/UploadTool/run.sh init --project-root /path/to/flutter_project
 ```
 
-Если UploadTool подключён как папка `./UploadTool` внутри проекта, можно так:
+If UploadTool lives inside the Flutter project (`./UploadTool`), you can also run:
 
 ```bash
 mkdir -p .uploadtool
 cp UploadTool/config/release.env.example .uploadtool/release.env
 ```
 
-Если ты используешь UploadTool как «папку внутри проекта» и не хочешь заводить `.uploadtool`, можно по‑старому:
+Legacy option (keep configs inside UploadTool itself):
 
 ```bash
 cp UploadTool/config/release.env.example UploadTool/config/release.env
 ```
 
-#### 2) Выбери один способ авторизации
+#### 2) Pick exactly one authentication method
 
-В `release.env` укажи **один** вариант:
+Inside `release.env` provide **one** of the following:
 
-- Вариант A (рекомендуется): App Store Connect API key
+- Option A (recommended): App Store Connect API key
   - `ASC_KEY_ID`
   - `ASC_ISSUER_ID`
   - `ASC_KEY_PATH`
-- Вариант B: Apple ID + app-specific password
+- Option B: Apple ID + app-specific password
   - `FASTLANE_USER`
   - `FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD`
 
-Опционально (если несколько команд):
+Optional (when you belong to multiple teams):
 
 - `FASTLANE_TEAM_ID` / `FASTLANE_TEAM_NAME`
 
-#### 3) Запусти мастер
+#### 3) Launch the wizard
 
-Если UploadTool лежит в проекте:
+If UploadTool is part of the Flutter project:
 
 ```bash
 ./UploadTool/run.sh ios
 ```
 
-Если UploadTool лежит отдельно:
+If UploadTool is stored elsewhere:
 
 ```bash
 bash /path/to/UploadTool/run.sh --project-root /path/to/flutter_project --config-dir /path/to/flutter_project/.uploadtool ios
 ```
 
-Проверить только сборку `.ipa` (без загрузки): в wizard выбери `Upload iOS to TestFlight? -> n`.
+To only build the `.ipa` (without uploading), answer `n` to `Upload iOS to TestFlight?` inside the wizard.
 
-### Выбор окружения (dev/prod) — через JSON
+### Choosing the environment (dev/prod) via JSON
 
-Окружение приложения задаётся через `env.json` в директории конфигов (например `.uploadtool/env.json`).
+The environment is controlled through `env.json` inside the config directory (for example `.uploadtool/env.json`).
 
-- `APP_ENV`: `dev` или `prod`
-- `BASE_URL`: опционально (если твоё приложение умеет его читать)
+- `APP_ENV`: `dev` or `prod`
+- `BASE_URL`: optional (if your app reads it)
 
-По умолчанию UploadTool обновляет `APP_ENV`. Если в твоём проекте уже используется другой ключ — можно задать:
+UploadTool updates `APP_ENV` by default. If your project already uses another key, set:
 
 - `UPLOADTOOL_ENV_JSON_ENV_KEY=...`
 
-Если файла ещё нет, можно создать из примера:
+Need a starting point? Copy the template:
 
 ```bash
 mkdir -p .uploadtool
 cp /path/to/UploadTool/config/env.json.example .uploadtool/env.json
 ```
 
-Самый простой путь — запускать wizard (`run.sh`): мастер спросит окружение и подготовит per-env файл dart-defines.
+The easiest way is to run the wizard (`run.sh`). It will ask for the environment and prepare per-env `dart-defines` files.
 
-Важно: непосредственно в `flutter build` UploadTool прокидывает **не общий** `.uploadtool/env.json`, а пер‑окруженческий файл:
+Important: `flutter build` never reads `.uploadtool/env.json` directly. Instead, UploadTool generates a per-environment file:
 
 - `state/<env>/dart_defines.json`
 
-Он формируется так:
+Generation steps:
 
-- копируется текущий `env.json` (чтобы сохранить остальные ключи, например `BASE_URL`)
-- затем в копии обновляется ключ окружения (`APP_ENV`/`CHOYS_ENV`/или ключ из `UPLOADTOOL_ENV_JSON_ENV_KEY`) под выбранный `dev`/`prod`
+1. Copy the current `env.json` (to preserve every other key such as `BASE_URL`).
+2. Update the environment key (`APP_ENV`/`CHOYS_ENV`/custom) inside the copy for the chosen `dev`/`prod` value.
 
-Это нужно, чтобы при сборке `dev + prod` две сборки не перетирали общий JSON и не читали “не своё” окружение.
+This avoids race conditions when building `dev + prod` sequentially.
 
-Если выбрано `dev + prod`, wizard выполнит две публикации подряд:
+When you select `dev + prod`, the wizard performs two uploads back-to-back:
 
-- build number используется в формате `YYYYMMDD.N.X`, где `X`: `dev=0`, `prod=1`
-- dev (тестовая сборка) — например `20260220.1.0`
-- prod (релизная сборка) — ядро `YYYYMMDD.N` на 1 больше + суффикс `.1` (пример: dev `20260220.1.0` → prod `20260220.2.1`)
+- Build number format: `YYYYMMDD.N.X`, where `X` is `0` for dev and `1` for prod.
+- Example: dev `20260220.1.0` → prod `20260220.2.1` (core number increments, suffix flips to `.1`).
 
-### State и retention артефактов
+### State directory and artifact retention
 
-После сборки `.ipa` копируется в:
+Each `.ipa` is copied to:
 
 - `state/<env>/artifacts/app-<env>-<BUILD_NUMBER>.ipa`
 
-Чтобы `state/` не разрастался, включён retention:
+Retention keeps the directory under control:
 
-- хранится только последние `3` `.ipa` на окружение (`dev`/`prod`)
-- количество можно изменить переменной `UPLOADTOOL_STATE_ARTIFACTS_KEEP`
+- Only the last **3** `.ipa` files per environment are stored (`UPLOADTOOL_STATE_ARTIFACTS_KEEP` overrides the number).
 
-Если собираешь/запускаешь из IDE — добавь в run конфиг Flutter аргумент:
+When running from IDE, pass:
 
 - `--dart-define-from-file=.uploadtool/env.json`
 
-Если хочешь 1:1 повторить поведение UploadTool для конкретного окружения — используй:
+To mimic UploadTool exactly for a specific environment use:
 
 - `--dart-define-from-file=.uploadtool/state/<env>/dart_defines.json`
 
-### Авторизация в TestFlight
+### TestFlight authentication
 
-#### Вариант A: App Store Connect API key
+#### Option A: App Store Connect API key
 
-В App Store Connect:
+In App Store Connect:
 
 - **Users and Access → Integrations → Keys**
-- Создай ключ и скачай `AuthKey_XXXXXX.p8`
+- Create a key and download `AuthKey_XXXXXX.p8`
 
-В `release.env` укажи:
+Populate `release.env` with:
 
 - `ASC_KEY_ID`
 - `ASC_ISSUER_ID`
-- `ASC_KEY_PATH` (путь до скачанного `.p8`)
+- `ASC_KEY_PATH` (path to the downloaded `.p8`)
 
-Важно: файл `.p8` **не хранится** в macOS Keychain.
+Note: the `.p8` file is **not** stored in the macOS Keychain.
 
-#### Вариант B: Apple ID + app-specific password (без API key)
+#### Option B: Apple ID + app-specific password (no API key)
 
-Сгенерируй app-specific password на `appleid.apple.com` и укажи в `release.env`:
+Generate the password on `appleid.apple.com` and add to `release.env`:
 
 - `FASTLANE_USER`
 - `FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD`
 
-Опционально (если несколько команд в App Store Connect):
+Optional when multiple App Store Connect teams are involved:
 
 - `FASTLANE_TEAM_ID`
 - `FASTLANE_TEAM_NAME`
 
-Также поддерживаются legacy-алиасы: `FASTLANE_ITC_TEAM_ID`, `FASTLANE_ITC_TEAM_NAME`.
+Legacy aliases are still supported: `FASTLANE_ITC_TEAM_ID`, `FASTLANE_ITC_TEAM_NAME`.
 
-### Что именно запускается
+### What exactly runs
 
-`run.sh ios` (или `./UploadTool/run.sh ios`, если подключено как папка в проекте):
+`run.sh ios` (or `./UploadTool/run.sh ios` when UploadTool is inside the project):
 
-- загружает env‑переменные из `release.env` (по умолчанию из `--config-dir` / `.uploadtool` / `config/` рядом с `run.sh`)
-- делает `bundle install` в `UPLOADTOOL_FASTLANE_ROOT` (по умолчанию это `fastlane/` рядом с `run.sh`)
-- запускает lane `ios upload_testflight`
+- loads env variables from `release.env` (from `--config-dir`, `.uploadtool`, or `config/` next to `run.sh`)
+- executes `bundle install` inside `UPLOADTOOL_FASTLANE_ROOT` (defaults to `fastlane/` next to `run.sh`)
+- triggers the `ios upload_testflight` lane
 
-Fastlane‑логика:
+Fastlane logic:
 
-- лежит в `fastlane/fastlane/Fastfile`
-- выполняет `flutter pub get`
-- выполняет `flutter build ipa --release` (если не задан `SKIP_FLUTTER_BUILD=1`)
-- загружает `build/ios/ipa/*.ipa` в TestFlight
+- lives in `fastlane/fastlane/Fastfile`
+- runs `flutter pub get`
+- runs `flutter build ipa --release` (unless `SKIP_FLUTTER_BUILD=1` is set)
+- uploads `build/ios/ipa/*.ipa` to TestFlight
 
-### Решение проблем
+### Troubleshooting
 
-#### `error: exportArchive Copy failed` / проблемы с `rsync`
+#### `error: exportArchive Copy failed` / `rsync` issues
 
-Если `flutter build ipa` падает с:
+If `flutter build ipa` crashes with:
 
 - `error: exportArchive Copy failed`
-- и в `.xcdistributionlogs` есть что-то вроде:
-  - `rsync: on remote machine: --extended-attributes: unknown option`
+- `.xcdistributionlogs` containing `rsync: on remote machine: --extended-attributes: unknown option`
 
-то обычно причина — **Homebrew rsync** “перехватывает” системный:
+The usual culprit is **Homebrew rsync** shadowing the system binary:
 
 - Homebrew: `/opt/homebrew/bin/rsync` (3.x)
-- System: `/usr/bin/rsync` (совместим с export pipeline Xcode)
+- System: `/usr/bin/rsync` (compatible with the Xcode export pipeline)
 
-В Xcode export pipeline может вызвать `/usr/bin/rsync`, но “server” rsync подтянуть через `PATH`. Если первым в `PATH` стоит Homebrew rsync — export ломается.
+The Xcode export pipeline may start `/usr/bin/rsync` but pick the Homebrew daemon via `PATH`, which breaks the process.
 
-Wizard (`run.sh`) уже принудительно ставит системные пути первыми в `PATH`. Если делаешь вручную:
+The wizard (`run.sh`) already prepends system paths to `PATH`. If you run things manually, do the same:
 
 ```bash
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH"

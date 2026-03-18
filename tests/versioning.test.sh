@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-TEST_DESCRIPTION="Версионирование: извлечение/инкремент build number, форматирование под env"
+TEST_DESCRIPTION="Versioning: extract/increment build number and format for env"
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPLOAD_TOOL_DIR="$(cd "${TEST_DIR}/.." && pwd)"

@@ -5,9 +5,9 @@ cd "$(dirname "$0")"
 
 bash ./test.sh "$@"
 
-# Чтобы не зависать в CI/скриптах — ждём ввода только в интерактивном терминале.
+# To avoid hanging in CI/scripts — wait for input only in an interactive terminal.
 if [[ -t 0 ]]; then
   echo
-  read -n 1 -s -r -p "Нажми любую клавишу, чтобы закрыть..."
+  read -n 1 -s -r -p "Press any key to close..."
   echo
 fi

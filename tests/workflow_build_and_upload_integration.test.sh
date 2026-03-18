@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-TEST_DESCRIPTION="Workflow: интеграционный тест оркестрации build+upload (fastlane вызовы, статусы)"
+TEST_DESCRIPTION="Workflow: integration test for build+upload orchestration (fastlane calls, statuses)"
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPLOAD_TOOL_DIR="$(cd "${TEST_DIR}/.." && pwd)"
@@ -9,6 +9,8 @@ UPLOAD_TOOL_DIR="$(cd "${TEST_DIR}/.." && pwd)"
 source "${UPLOAD_TOOL_DIR}/lib/infra/runner.sh"
 # shellcheck disable=SC1090
 source "${UPLOAD_TOOL_DIR}/lib/infra/time.sh"
+# shellcheck disable=SC1090
+source "${UPLOAD_TOOL_DIR}/lib/i18n/en.sh"
 # shellcheck disable=SC1090
 source "${UPLOAD_TOOL_DIR}/lib/workflow.sh"
 
@@ -65,7 +67,7 @@ uploadtool_run_cmd_override() {
   UPLOADTOOL_FASTLANE_ROOT="${_tmp}/fastlane"
   export UPLOADTOOL_FASTLANE_ROOT
   mkdir -p "${UPLOADTOOL_FASTLANE_ROOT}"
-  # Достаточно пустого Gemfile, чтобы cd работал. bundler/fastlane не запускаются реально (мок).
+  # Empty Gemfile is enough so `cd` works; bundler/fastlane are mocked.
   printf "source 'https://rubygems.org'\n" > "${UPLOADTOOL_FASTLANE_ROOT}/Gemfile"
 
   FASTLANE_CALLS_FILE="${_tmp}/fastlane_calls.txt"
@@ -100,20 +102,20 @@ uploadtool_run_cmd_override() {
 
   uploadtool_build_and_upload_for_env "dev" "$state_dir" 0 || exit 1
 
-  assert_file_exists "${state_dir}/upload_android_exit_code.txt" "должен создаться android status file" || exit 1
-  assert_file_exists "${state_dir}/upload_ios_exit_code.txt" "должен создаться ios status file" || exit 1
+  assert_file_exists "${state_dir}/upload_android_exit_code.txt" "Android status file must be created" || exit 1
+  assert_file_exists "${state_dir}/upload_ios_exit_code.txt" "iOS status file must be created" || exit 1
 
   rc_android="$(cat "${state_dir}/upload_android_exit_code.txt" | tr -d '\r\n')"
   rc_ios="$(cat "${state_dir}/upload_ios_exit_code.txt" | tr -d '\r\n')"
-  check assert_eq "0" "$rc_android" "android upload rc должен быть 0"
-  check assert_eq "0" "$rc_ios" "ios upload rc должен быть 0"
+  check assert_eq "0" "$rc_android" "Android upload rc must be 0"
+  check assert_eq "0" "$rc_ios" "iOS upload rc must be 0"
 
-  assert_file_exists "${UPLOAD_LOG_DIR}/dev_android_upload.log" "должен создаться лог Android upload" || exit 1
-  assert_file_exists "${UPLOAD_LOG_DIR}/dev_ios_upload.log" "должен создаться лог iOS upload" || exit 1
+  assert_file_exists "${UPLOAD_LOG_DIR}/dev_android_upload.log" "Android upload log must exist" || exit 1
+  assert_file_exists "${UPLOAD_LOG_DIR}/dev_ios_upload.log" "iOS upload log must exist" || exit 1
 
-  # Проверяем, что fastlane вызывался для обеих платформ
+  # Ensure fastlane was called for both platforms
   calls_count="$(wc -l < "${FASTLANE_CALLS_FILE}" | tr -d '[:space:]')"
-  [[ "${calls_count:-0}" -ge 2 ]] || { echo "fastlane должен вызваться минимум 2 раза" >&2; exit 1; }
+  [[ "${calls_count:-0}" -ge 2 ]] || { echo "fastlane must be invoked at least twice" >&2; exit 1; }
 )
 rc=$?
 if [[ "$rc" -ne 0 ]]; then

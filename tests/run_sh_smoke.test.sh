@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-TEST_DESCRIPTION="Smoke: полный прогон run.sh в фейковом репо с моками команд"
+TEST_DESCRIPTION="Smoke: full run.sh execution in a fake repo with mocked commands"
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPLOAD_TOOL_DIR="$(cd "${TEST_DIR}/.." && pwd)"
@@ -31,8 +31,8 @@ cp -R "${UPLOAD_TOOL_DIR}" "${_tmp}/UploadTool"
 mkdir -p "${_tmp}/UploadTool/fastlane"
 printf "source 'https://rubygems.org'\n" > "${_tmp}/UploadTool/fastlane/Gemfile"
 
-# В рабочем репо эти файлы могут существовать локально (они gitignored) и ломать тест,
-# переопределяя переменные окружения. Для smoke-теста они не нужны.
+# In a real repo these files might exist locally (gitignored) and break the test
+# by overriding env vars; they are not needed for the smoke test.
 rm -f "${_tmp}/UploadTool/config/wizard.env" || true
 rm -f "${_tmp}/UploadTool/config/release.env" || true
 rm -f "${_tmp}/UploadTool/config/env.json" || true
@@ -46,8 +46,7 @@ cat > "${_tmp}/release.env" <<'ENV'
 # empty on purpose for smoke test
 ENV
 
-# Создаём дефолтный проектный конфиг-dir. После изменения логики run.sh
-# дефолтный UPLOAD_CONFIG_DIR — <project>/.uploadtool.
+# Create default project config dir (<project>/.uploadtool) expected by run.sh.
 mkdir -p "${_tmp}/.uploadtool"
 cp "${_tmp}/release.env" "${_tmp}/.uploadtool/release.env"
 cp "${_tmp}/UploadTool/config/wizard.env.example" "${_tmp}/.uploadtool/wizard.env"
@@ -133,8 +132,8 @@ else
   assert_file_exists "${state_dir}/ios_ipa_path.txt" || _failed=1
   aab_path="$(cat "${state_dir}/android_aab_path.txt" | tr -d '\r\n')"
   ipa_path="$(cat "${state_dir}/ios_ipa_path.txt" | tr -d '\r\n')"
-  assert_file_exists "$aab_path" "AAB artifact должен существовать" || _failed=1
-  assert_file_exists "$ipa_path" "IPA artifact должен существовать" || _failed=1
+  assert_file_exists "$aab_path" "AAB artifact must exist" || _failed=1
+  assert_file_exists "$ipa_path" "IPA artifact must exist" || _failed=1
 fi
 
 rm -rf "${_tmp}"

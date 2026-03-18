@@ -9,9 +9,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 UPLOAD_TOOL_DIR="$SCRIPT_DIR"
 if [[ ! -d "$UPLOAD_TOOL_DIR/lib" ]]; then
-  echo "❌ Не найдена папка lib рядом с run.sh: $UPLOAD_TOOL_DIR/lib" >&2
+  echo "❌ Could not find lib directory next to run.sh: $UPLOAD_TOOL_DIR/lib" >&2
   exit 1
 fi
+
+source "$UPLOAD_TOOL_DIR/lib/i18n.sh"
+uploadtool_i18n_init
 
 # CLI overrides
 PROJECT_ROOT_ARG=""
@@ -106,7 +109,7 @@ EOF
 
 uploadtool_cli_init() {
   if [[ "${#@}" -ne 0 ]]; then
-    echo "❌ Неизвестные аргументы для init: $*" >&2
+    printf "$MSG_RUN_ERR_UNKNOWN_INIT_ARGS\n" "$*" >&2
     return 1
   fi
 
@@ -116,20 +119,21 @@ uploadtool_cli_init() {
     if [[ -f "${PWD}/pubspec.yaml" ]]; then
       project_root="$PWD"
     else
-      read -r -p "Путь к Flutter-проекту (где pubspec.yaml): " project_root
+      printf '%s: ' "$MSG_INIT_PROMPT_PROJECT_ROOT"
+      read -r project_root
     fi
   fi
   if [[ -z "$project_root" ]]; then
-    echo "❌ Не задан --project-root и не удалось определить проект." >&2
+    echo "$MSG_INIT_ERR_PROJECT_PATH_EMPTY" >&2
     return 1
   fi
   if [[ ! -d "$project_root" ]]; then
-    echo "❌ Директория проекта не найдена: $project_root" >&2
+    printf "$MSG_INIT_ERR_PROJECT_DIR_NOT_FOUND\n" "$project_root" >&2
     return 1
   fi
   project_root="$(cd "$project_root" && pwd)"
   if [[ ! -f "$project_root/pubspec.yaml" ]]; then
-    echo "❌ Не найден pubspec.yaml в: $project_root" >&2
+    printf "$MSG_INIT_ERR_PUBSPEC_NOT_FOUND\n" "$project_root" >&2
     return 1
   fi
 
@@ -145,7 +149,7 @@ uploadtool_cli_init() {
   local src_dir
   src_dir="$UPLOAD_TOOL_DIR/config"
   if [[ ! -d "$src_dir" ]]; then
-    echo "❌ Не найдена директория шаблонов: $src_dir" >&2
+    printf "$MSG_RUN_INIT_TEMPLATE_DIR_NOT_FOUND\n" "$src_dir" >&2
     return 1
   fi
 
@@ -160,7 +164,7 @@ uploadtool_cli_init() {
     local label="$3"
 
     if [[ -f "$dst" && "${INIT_FORCE:-0}" != "1" ]]; then
-      echo "   ✅ $label уже существует: $dst (пропущено)"
+      printf "$MSG_RUN_INIT_TEMPLATE_EXISTS\n" "$label" "$dst"
       return 0
     fi
     cp -f "$src" "$dst"
@@ -178,20 +182,20 @@ uploadtool_cli_init() {
       cli_file="$config_dir/cli.env"
     fi
     if [[ -z "$cli_file" ]]; then
-      echo "❌ Не удалось определить путь для cli.env (нет HOME и не передан --cli-env-file / UPLOADTOOL_CLI_ENV_FILE)" >&2
+      echo "$MSG_RUN_INIT_ERR_CLI_ENV_PATH" >&2
       return 1
     fi
 
     uploadtool_write_cli_env_file "$cli_file" "$project_root" "$config_dir" "${FASTLANE_ROOT_ARG:-}" "${UPLOADTOOL_ENV_JSON_ENV_KEY:-}"
-    echo "   💾 Сохранены дефолты CLI: $cli_file"
+    printf "$MSG_RUN_INIT_CLI_DEFAULTS_SAVED\n" "$cli_file"
   fi
 
   echo
-  echo "🎉 Готово. Дальше открой и заполни:"
-  echo "   - $config_dir/release.env"
+  echo "$MSG_RUN_INIT_DONE_HEADER"
+  printf "$MSG_RUN_INIT_DONE_RELEASE_ENV_ITEM\n" "$config_dir"
   echo
-  echo "Запуск:"
-  echo "   bash $UPLOAD_TOOL_DIR/run.sh --project-root $project_root --config-dir $config_dir"
+  echo "$MSG_RUN_INIT_RUN_HEADER"
+  printf "$MSG_RUN_INIT_RUN_COMMAND\n" "$UPLOAD_TOOL_DIR" "$project_root" "$config_dir"
   echo
   return 0
 }
@@ -204,10 +208,10 @@ else
 fi
 
 source "$UPLOAD_TOOL_DIR/lib/profiles.sh"
+source "$UPLOAD_TOOL_DIR/lib/i18n.sh"
+uploadtool_i18n_init
 
-# Если cli.env задан явно (флагом или env-переменной) — загрузим его сразу,
-# чтобы он мог задать UPLOADTOOL_CLI_PROJECT_ROOT/UPLOADTOOL_CLI_CONFIG_DIR
-# ещё до выбора проекта.
+# Load explicit cli.env early (flag/env) to allow overriding project/config paths before profile selection.
 if [[ -n "$CLI_ENV_FILE" && -f "$CLI_ENV_FILE" ]]; then
   # shellcheck disable=SC1090
   source "$CLI_ENV_FILE"
@@ -228,8 +232,7 @@ if [[ "$COMMAND" == "init" || "$COMMAND" == "setup" ]]; then
 fi
 
 # Flutter project root (ROOT_DIR)
-# Важно: не используем ROOT_DIR из внешней среды, чтобы случайно не подхватить
-# «чужой» проект (ROOT_DIR — внутренняя переменная этого скрипта).
+# Use internal variable only to avoid picking up an unrelated project.
 PROJECT_ROOT="${PROJECT_ROOT_ARG:-${UPLOADTOOL_CLI_PROJECT_ROOT:-${UPLOADTOOL_PROJECT_ROOT:-}}}"
 
 if [[ -z "$PROJECT_ROOT" && -n "$PROJECT_PROFILE_ARG" ]]; then
@@ -246,7 +249,7 @@ if [[ -z "$PROJECT_ROOT" && -n "$PROJECT_PROFILE_ARG" ]]; then
       export UPLOADTOOL_ENV_JSON_ENV_KEY="$UPLOADTOOL_CLI_ENV_JSON_ENV_KEY"
     fi
   else
-    echo "❌ Не удалось загрузить профиль проекта: $PROJECT_PROFILE_ARG" >&2
+    printf "$MSG_RUN_ERR_PROFILE_LOAD_FAILED\n" "$PROJECT_PROFILE_ARG" >&2
     exit 1
   fi
 fi
@@ -288,7 +291,7 @@ if [[ -z "$PROJECT_ROOT" ]]; then
         export UPLOADTOOL_ENV_JSON_ENV_KEY="$UPLOADTOOL_CLI_ENV_JSON_ENV_KEY"
       fi
     else
-      echo "❌ Не удалось загрузить профиль проекта: $selected_profile" >&2
+      printf "$MSG_RUN_ERR_PROFILE_LOAD_FAILED\n" "$selected_profile" >&2
       exit 1
     fi
   fi
@@ -298,9 +301,9 @@ if [[ -z "$PROJECT_ROOT" ]]; then
   PROJECT_ROOT="${UPLOADTOOL_CLI_PROJECT_ROOT:-}"
 fi
 if [[ -z "$PROJECT_ROOT" ]]; then
-  echo "❌ Не удалось определить корень Flutter-проекта (где pubspec.yaml)." >&2
-  echo "   Укажи через --project-root /path/to/flutter или ENV UPLOADTOOL_PROJECT_ROOT." >&2
-  echo "   Или выбери сохранённый проект через --project <name> (см. init.sh)." >&2
+  echo "$MSG_RUN_ERR_PROJECT_ROOT_UNRESOLVED" >&2
+  echo "$MSG_RUN_HINT_SET_PROJECT_ROOT" >&2
+  echo "$MSG_RUN_HINT_USE_PROFILE" >&2
   exit 1
 fi
 
@@ -316,7 +319,7 @@ fi
 require_cmd() {
   local cmd="$1"
   if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo "❌ Не найдена зависимость: '$cmd'" >&2
+    printf "$MSG_RUN_ERR_DEPENDENCY_NOT_FOUND\n" "$cmd" >&2
     exit 1
   fi
 }
@@ -324,8 +327,7 @@ require_cmd() {
 require_cmd python3
 require_cmd flutter
 
-# Конфиги/логи/state должны относиться к конкретному Flutter-проекту.
-# Поэтому дефолтная директория — <project>/.uploadtool.
+# Config/logs/state are tied to a specific Flutter project, so default to <project>/.uploadtool.
 UPLOAD_CONFIG_DIR="${CONFIG_DIR_ARG:-${UPLOADTOOL_CONFIG_DIR:-${UPLOADTOOL_CLI_CONFIG_DIR:-}}}"
 UPLOAD_CONFIG_DIR_DEFAULTED="0"
 if [[ -z "$UPLOAD_CONFIG_DIR" ]]; then
@@ -337,7 +339,7 @@ if [[ -z "$UPLOAD_CONFIG_DIR" ]]; then
   fi
 fi
 
-# Если путь передан относительным, делаем его абсолютным относительно ROOT_DIR.
+# Convert relative config path to absolute (relative to ROOT_DIR).
 if [[ "$UPLOAD_CONFIG_DIR" != /* ]]; then
   UPLOAD_CONFIG_DIR="$ROOT_DIR/$UPLOAD_CONFIG_DIR"
 fi
@@ -360,22 +362,21 @@ if [[ -z "${UPLOADTOOL_ENV_JSON_ENV_KEY:-}" && -n "${UPLOADTOOL_CLI_ENV_JSON_ENV
 fi
 
 if [[ ! -d "$UPLOAD_CONFIG_DIR" ]]; then
-  # Если это дефолтная проектная директория — создаём автоматически.
+  # Auto-create default project config directory; otherwise fail-fast.
   if [[ "$UPLOAD_CONFIG_DIR_DEFAULTED" == "1" && "$UPLOAD_CONFIG_DIR" == "$ROOT_DIR/.uploadtool" ]]; then
     mkdir -p "$UPLOAD_CONFIG_DIR"
   else
-    echo "❌ Не найдена директория конфигов: $UPLOAD_CONFIG_DIR" >&2
-    echo "   Создай её (например: mkdir -p .uploadtool) или передай корректный --config-dir." >&2
+    printf "$MSG_RUN_ERR_CONFIG_DIR_NOT_FOUND\n" "$UPLOAD_CONFIG_DIR" >&2
+    echo "$MSG_RUN_ERR_CONFIG_DIR_HINT_CREATE" >&2
     exit 1
   fi
 fi
 
-# Приведём путь к каноническому абсолютному виду (без ../ и .), чтобы вывод
-# был понятным, а сравнения путей работали корректно.
+# Canonicalize config path for consistent printing/comparison.
 UPLOAD_CONFIG_DIR="$(cd "$UPLOAD_CONFIG_DIR" && pwd)"
 export UPLOADTOOL_CONFIG_DIR="$UPLOAD_CONFIG_DIR"
 
-# Файл для локального хранения FASTLANE_SESSION (пер-проект, не для git).
+# Local FASTLANE_SESSION storage (per project, gitignored).
 FASTLANE_SESSION_FILE="$UPLOAD_CONFIG_DIR/fastlane_session.env"
 
 runtime_root="$UPLOAD_TOOL_DIR"
@@ -401,6 +402,8 @@ source "$UPLOAD_TOOL_DIR/lib/env_json.sh"
 source "$UPLOAD_TOOL_DIR/lib/android_version_code.sh"
 source "$UPLOAD_TOOL_DIR/lib/notes.sh"
 source "$UPLOAD_TOOL_DIR/lib/config.sh"
+source "$UPLOAD_TOOL_DIR/lib/i18n.sh"
+uploadtool_i18n_init
 
 TARGET_ARG="${1:-}"
 if [[ "$TARGET_ARG" == "ios" || "$TARGET_ARG" == "android" || "$TARGET_ARG" == "both" ]]; then
@@ -409,12 +412,11 @@ else
   TARGET_ARG=""
 fi
 
-# Единственный источник кредов и настроек сборки/публикации — release.env.
+# release.env is the single source of credentials/build settings.
 ENV_FILE="$(uploadtool_select_env_file "${ENV_FILE:-}" "$UPLOAD_CONFIG_DIR")"
 uploadtool_load_env_file_if_present "$ENV_FILE"
 
-# Настройки поведения мастера (значения по умолчанию и пропуск шагов). Опционально.
-# См. config/wizard.env.example
+# Optional wizard behavior overrides (defaults/skip flags). See config/wizard.env.example
 uploadtool_load_wizard_env_if_present "$UPLOAD_CONFIG_DIR/wizard.env"
 
 pubspec_version_line="$(sed -nE 's/^version:[[:space:]]*([^[:space:]]+).*/\1/p' pubspec.yaml | head -n 1 || true)"
@@ -428,16 +430,18 @@ if [[ -n "$pubspec_version_line" ]]; then
 fi
 
 echo
-echo "🚀 Release wizard"
-echo "   Project: $ROOT_DIR"
-echo "   Tool:    $UPLOAD_TOOL_DIR"
-echo "   Config:  $UPLOAD_CONFIG_DIR"
-echo "   Logs:    $UPLOAD_LOG_DIR"
-echo "   State:   $UPLOAD_STATE_DIR"
-echo "   Fastlane:$UPLOADTOOL_FASTLANE_ROOT"
-echo "   Release: ${ENV_FILE:-<none>}"
-echo "   Env key: ${UPLOADTOOL_ENV_JSON_ENV_KEY:-APP_ENV}"
-[[ -f "$UPLOAD_CONFIG_DIR/wizard.env" ]] && echo "   Wizard:  $UPLOAD_CONFIG_DIR/wizard.env"
+echo "$MSG_RUN_WIZARD_HEADER"
+printf "$MSG_RUN_WIZARD_PROJECT\n" "$ROOT_DIR"
+printf "$MSG_RUN_WIZARD_TOOL\n" "$UPLOAD_TOOL_DIR"
+printf "$MSG_RUN_WIZARD_CONFIG\n" "$UPLOAD_CONFIG_DIR"
+printf "$MSG_RUN_WIZARD_LOGS\n" "$UPLOAD_LOG_DIR"
+printf "$MSG_RUN_WIZARD_STATE\n" "$UPLOAD_STATE_DIR"
+printf "$MSG_RUN_WIZARD_FASTLANE\n" "$UPLOADTOOL_FASTLANE_ROOT"
+printf "$MSG_RUN_WIZARD_RELEASE\n" "${ENV_FILE:-<none>}"
+printf "$MSG_RUN_WIZARD_ENV_KEY\n" "${UPLOADTOOL_ENV_JSON_ENV_KEY:-APP_ENV}"
+if [[ -f "$UPLOAD_CONFIG_DIR/wizard.env" ]]; then
+  printf "$MSG_RUN_WIZARD_WIZARD_ENV\n" "$UPLOAD_CONFIG_DIR/wizard.env"
+fi
 echo
 
 targets="${RELEASE_TARGETS:-}"
@@ -445,13 +449,13 @@ if [[ -z "$targets" ]]; then
   targets="$TARGET_ARG"
 fi
 
-# Если есть сохранённый FASTLANE_SESSION — подхватим его до любых вызовов fastlane.
+# Reuse saved FASTLANE_SESSION before any fastlane calls.
 if [[ -f "$FASTLANE_SESSION_FILE" ]]; then
   # shellcheck disable=SC1090
   source "$FASTLANE_SESSION_FILE"
 fi
 
-# Значение по умолчанию для «Куда собираем?» (1=ios, 2=android, 3=both)
+# Default “what to build” choice (1=ios, 2=android, 3=both)
 wizard_default_targets="${WIZARD_DEFAULT_TARGETS:-both}"
 default_t="3"
 [[ "$wizard_default_targets" == "ios" ]] && default_t="1"
@@ -459,19 +463,20 @@ default_t="3"
 
 if [[ -n "${WIZARD_SKIP_TARGETS:-}" && "${WIZARD_SKIP_TARGETS}" == "1" ]]; then
   targets="$wizard_default_targets"
-  echo "📱 Куда собираем: $targets (из wizard.env, шаг пропущен)"
+  printf "$MSG_RUN_TARGETS_FROM_WIZARD_ENV\n" "$targets"
 elif [[ -z "$targets" ]]; then
-  echo "📱 Куда собираем?"
-  echo "   1) iOS (TestFlight)"
-  echo "   2) Android (Google Play)"
-  echo "   3) Оба (по умолчанию)"
-  read -r -p "   Выбор (1/2/3) [${default_t}]: " t
+  echo "$MSG_RUN_TARGETS_QUESTION_TITLE"
+  echo "$MSG_RUN_TARGETS_IOS_OPTION"
+  echo "$MSG_RUN_TARGETS_ANDROID_OPTION"
+  echo "$MSG_RUN_TARGETS_BOTH_OPTION"
+  printf "$MSG_RUN_TARGETS_PROMPT_CHOICE" "$default_t"
+  read -r t
   t="${t:-$default_t}"
   case "$t" in
     1) targets="ios" ;;
     2) targets="android" ;;
     3) targets="both" ;;
-    *) echo "   ❌ Неверный выбор: $t"; exit 1 ;;
+    *) printf "$MSG_RUN_TARGETS_ERR_INVALID_CHOICE\n" "$t"; exit 1 ;;
   esac
 fi
 
@@ -546,7 +551,7 @@ bump_core_build_number_one() {
   printf '%s\n' "$v"
 }
 
-# Значение по умолчанию для окружения (1=dev, 2=prod, 3=both)
+# Default environment selection (1=dev, 2=prod, 3=both)
 wizard_default_env="${WIZARD_DEFAULT_ENV:-both}"
 default_e="3"
 [[ "$wizard_default_env" == "dev" ]] && default_e="1"
@@ -554,26 +559,29 @@ default_e="3"
 
 if [[ -n "${WIZARD_SKIP_ENV:-}" && "${WIZARD_SKIP_ENV}" == "1" ]]; then
   ENV_TARGETS="$wizard_default_env"
-  echo "🌍 Окружение: $ENV_TARGETS (из wizard.env, шаг пропущен)"
+  printf "$MSG_RUN_ENV_FROM_WIZARD_ENV\n" "$ENV_TARGETS"
 else
-  echo "🌍 Окружение (env.json):"
-  echo "   1) только dev  🧪"
-  echo "   2) только prod 🏪"
-  echo "   3) dev + prod  🎯  (по умолчанию)"
-  read -r -p "   Выбор (1/2/3) [${default_e}]: " env_choice
+  echo "$MSG_RUN_ENV_TITLE"
+  echo "$MSG_RUN_ENV_DEV_ONLY"
+  echo "$MSG_RUN_ENV_PROD_ONLY"
+  echo "$MSG_RUN_ENV_BOTH"
+  printf "$MSG_RUN_ENV_PROMPT_CHOICE" "$default_e"
+  read -r env_choice
   env_choice="${env_choice:-$default_e}"
   case "$env_choice" in
     1) ENV_TARGETS="dev" ;;
     2) ENV_TARGETS="prod" ;;
     3) ENV_TARGETS="both" ;;
-    *) echo "   ❌ Неверный выбор: $env_choice"; exit 1 ;;
+    *) printf "$MSG_RUN_ENV_ERR_INVALID_CHOICE\n" "$env_choice"; exit 1 ;;
   esac
 fi
 
 echo
-echo "📦 Версия сборки:"
-read -r -p "   Build name (versionName) [${default_build_name:-from pubspec.yaml}]: " build_name
-read -r -p "   Build number (YYYYMMDD.N[.X], X: dev=0, prod=1) [${default_build_number:-from pubspec.yaml}]: " build_number
+echo "$MSG_RUN_BUILD_VERSION_TITLE"
+printf "$MSG_RUN_BUILD_NAME_PROMPT" "${default_build_name:-from pubspec.yaml}"
+read -r build_name
+printf "$MSG_RUN_BUILD_NUMBER_PROMPT" "${default_build_number:-from pubspec.yaml}"
+read -r build_number
 
 compute_next_core_build_number() {
   uploadtool_compute_next_core_build_number "${1:-}"
@@ -588,7 +596,7 @@ if [[ -n "${build_name// /}" ]]; then
   FINAL_BUILD_NAME="$build_name"
 fi
 if [[ -z "$FINAL_BUILD_NAME" ]]; then
-  echo "   ❌ Не удалось определить build name. Введи его вручную."
+  echo "$MSG_RUN_ERR_BUILD_NAME_EMPTY"
   exit 1
 fi
 export BUILD_NAME="$FINAL_BUILD_NAME"
@@ -600,7 +608,7 @@ else
   BASE_CORE_BUILD_NUMBER="$(compute_next_core_build_number "$default_build_number")"
 fi
 if [[ -z "$BASE_CORE_BUILD_NUMBER" ]]; then
-  echo "   ❌ Не удалось определить build number. Используй YYYYMMDD.N или YYYYMMDD.N.X"
+  echo "$MSG_RUN_ERR_BUILD_NUMBER_EMPTY"
   exit 1
 fi
 
@@ -610,7 +618,7 @@ if [[ "$ENV_TARGETS" == "both" ]]; then
   dev_core="$BASE_CORE_BUILD_NUMBER"
   prod_core="$(bump_core_build_number_one "$dev_core")"
   if [[ -z "$prod_core" ]]; then
-    echo "   ❌ Build number '$BASE_CORE_BUILD_NUMBER' не подходит для dev+prod. Используй YYYYMMDD.N"
+    printf "$MSG_RUN_ERR_BUILD_NUMBER_BOTH_INVALID\n" "$BASE_CORE_BUILD_NUMBER"
     exit 1
   fi
   DEV_BUILD_NUMBER="$(format_build_number_for_env "$dev_core" "dev")"
@@ -628,11 +636,11 @@ case "$targets" in
   ios) BUILD_IOS=1 ;;
   android) BUILD_ANDROID=1 ;;
   both) BUILD_IOS=1; BUILD_ANDROID=1 ;;
-  *) echo "   ❌ Неверные targets: $targets"; exit 1 ;;
+  *) printf "$MSG_RUN_ERR_TARGETS_INVALID\n" "$targets"; exit 1 ;;
 esac
 
 echo
-echo "☁️  Загрузка в сторы:"
+echo "$MSG_RUN_UPLOAD_TITLE"
 UPLOAD_IOS=0
 UPLOAD_ANDROID=0
 wizard_upload_ios="${WIZARD_DEFAULT_UPLOAD_IOS:-1}"
@@ -640,16 +648,18 @@ wizard_upload_android="${WIZARD_DEFAULT_UPLOAD_ANDROID:-1}"
 if [[ -n "${WIZARD_SKIP_UPLOAD_PROMPTS:-}" && "${WIZARD_SKIP_UPLOAD_PROMPTS}" == "1" ]]; then
   [[ "$BUILD_IOS" -eq 1 ]] && UPLOAD_IOS="$wizard_upload_ios"
   [[ "$BUILD_ANDROID" -eq 1 ]] && UPLOAD_ANDROID="$wizard_upload_android"
-  echo "   iOS: $UPLOAD_IOS, Android: $UPLOAD_ANDROID (из wizard.env, шаг пропущен)"
+  printf "$MSG_RUN_UPLOAD_WIZARD_SKIPPED\n" "$UPLOAD_IOS" "$UPLOAD_ANDROID"
 else
   if [[ "$BUILD_IOS" -eq 1 ]]; then
     def_ios="Y"; [[ "$wizard_upload_ios" == "0" ]] && def_ios="n"
-    read -r -p "   Загрузить iOS в TestFlight? (y/n) [$(echo "$def_ios" | tr '[:upper:]' '[:lower:]')]: " ans
+    printf "$MSG_RUN_UPLOAD_IOS_PROMPT" "$(echo "$def_ios" | tr '[:upper:]' '[:lower:]')"
+    read -r ans
     case "${ans:-$def_ios}" in n|N|no|NO) UPLOAD_IOS=0 ;; *) UPLOAD_IOS=1 ;; esac
   fi
   if [[ "$BUILD_ANDROID" -eq 1 ]]; then
     def_android="Y"; [[ "$wizard_upload_android" == "0" ]] && def_android="n"
-    read -r -p "   Загрузить Android в Google Play? (y/n) [$(echo "$def_android" | tr '[:upper:]' '[:lower:]')]: " ans
+    printf "$MSG_RUN_UPLOAD_ANDROID_PROMPT" "$(echo "$def_android" | tr '[:upper:]' '[:lower:]')"
+    read -r ans
     case "${ans:-$def_android}" in n|N|no|NO) UPLOAD_ANDROID=0 ;; *) UPLOAD_ANDROID=1 ;; esac
   fi
 fi
@@ -657,8 +667,9 @@ fi
 uploadtool_validate_config "$UPLOAD_IOS" "$UPLOAD_ANDROID"
 
 echo
-echo "📝 Описание релиза (опционально):"
-read -r -p "   Текст для TestFlight / Google Play: " changelog
+echo "$MSG_RUN_CHANGELOG_TITLE"
+printf "%s" "$MSG_RUN_CHANGELOG_PROMPT"
+read -r changelog
 
 echo
 wizard_wait_ios="${WIZARD_DEFAULT_WAIT_IOS:-1}"
@@ -666,29 +677,30 @@ WAIT_IOS_CHOICE="0"
 if [[ "$UPLOAD_IOS" -eq 1 ]]; then
   if [[ -n "${WIZARD_SKIP_WAIT_IOS_PROMPT:-}" && "${WIZARD_SKIP_WAIT_IOS_PROMPT}" == "1" ]]; then
     WAIT_IOS_CHOICE="$wizard_wait_ios"
-    echo "   ⏳ Ждать обработку в TestFlight: $WAIT_IOS_CHOICE (из wizard.env, шаг пропущен)"
+    printf "$MSG_RUN_WAIT_IOS_FROM_WIZARD\n" "$WAIT_IOS_CHOICE"
   else
     def_wait="Y"; [[ "$wizard_wait_ios" == "0" ]] && def_wait="n"
-    read -r -p "⏳ Ждать обработку билда в TestFlight? (y/n) [$(echo "$def_wait" | tr '[:upper:]' '[:lower:]')]: " wait_choice
+    printf "$MSG_RUN_WAIT_IOS_PROMPT" "$(echo "$def_wait" | tr '[:upper:]' '[:lower:]')"
+    read -r wait_choice
     case "${wait_choice:-$def_wait}" in n|N|no|NO) WAIT_IOS_CHOICE="0" ;; *) WAIT_IOS_CHOICE="1" ;; esac
   fi
 fi
 
 echo
-echo "📋 Итог:"
-echo "   targets:    $targets"
-echo "   env:        $ENV_TARGETS"
-echo "   build name: ${BUILD_NAME}"
+echo "$MSG_RUN_SUMMARY_TITLE"
+printf "$MSG_RUN_SUMMARY_TARGETS\n" "$targets"
+printf "$MSG_RUN_SUMMARY_ENV\n" "$ENV_TARGETS"
+printf "$MSG_RUN_SUMMARY_BUILD_NAME\n" "${BUILD_NAME}"
 if [[ "$ENV_TARGETS" == "both" ]]; then
-  echo "   dev build:  ${DEV_BUILD_NUMBER}  🧪"
-  echo "   prod build: ${PROD_BUILD_NUMBER}  🏪"
+  printf "$MSG_RUN_SUMMARY_DEV_BUILD\n" "${DEV_BUILD_NUMBER}"
+  printf "$MSG_RUN_SUMMARY_PROD_BUILD\n" "${PROD_BUILD_NUMBER}"
 else
-  echo "   build num:  ${DEV_BUILD_NUMBER}"
+  printf "$MSG_RUN_SUMMARY_BUILD_NUM\n" "${DEV_BUILD_NUMBER}"
 fi
 build_notes_preview() {
   local env="$1"
   local header
-  if [[ "$env" == "prod" ]]; then header="Релизная сборка"; else header="Тестовая сборка"; fi
+  if [[ "$env" == "prod" ]]; then header="Release build"; else header="Test build"; fi
   if [[ -n "${changelog// /}" ]]; then
     printf '%s\n\n%s\n' "$header" "$changelog"
   else
@@ -697,47 +709,48 @@ build_notes_preview() {
 }
 
 if [[ -n "${changelog// /}" ]]; then
-  echo "   notes:"
+  echo "$MSG_RUN_NOTES_TITLE"
   printf '%s\n' "$changelog" | sed 's/^/      /'
 else
-  echo "   notes: <пусто>"
+  echo "$MSG_RUN_NOTES_EMPTY"
 fi
 
-echo "   превью заметок:"
+echo "$MSG_RUN_NOTES_PREVIEW_TITLE"
 if [[ "$ENV_TARGETS" == "both" ]]; then
-  echo "      [dev 🧪]"
+  echo "$MSG_RUN_NOTES_DEV_HEADER"
   build_notes_preview "dev" | sed 's/^/        /'
-  echo "      [prod 🏪]"
+  echo "$MSG_RUN_NOTES_PROD_HEADER"
   build_notes_preview "prod" | sed 's/^/        /'
 else
-  echo "      [$ENV_TARGETS]"
+  printf "$MSG_RUN_NOTES_ENV_HEADER\n" "$ENV_TARGETS"
   build_notes_preview "$ENV_TARGETS" | sed 's/^/        /'
 fi
 if [[ "$UPLOAD_IOS" -eq 1 && "$WAIT_IOS_CHOICE" == "1" ]]; then
-  echo "   wait ios:   да"
+  echo "$MSG_RUN_SUMMARY_WAIT_IOS_YES"
 else
-  echo "   wait ios:   нет"
+  echo "$MSG_RUN_SUMMARY_WAIT_IOS_NO"
 fi
-echo "   iOS:        upload=$UPLOAD_IOS  📱"
-echo "   Android:    upload=$UPLOAD_ANDROID  🤖"
+printf "$MSG_RUN_SUMMARY_IOS_UPLOAD\n" "$UPLOAD_IOS"
+printf "$MSG_RUN_SUMMARY_ANDROID_UPLOAD\n" "$UPLOAD_ANDROID"
 if [[ "$ENV_TARGETS" == "both" ]]; then
-  echo "   pubspec:    version: ${BUILD_NAME}+${PROD_BUILD_NUMBER} (после успешных загрузок)"
+  printf "$MSG_RUN_SUMMARY_PUBSPEC_PROD\n" "${BUILD_NAME}" "${PROD_BUILD_NUMBER}"
 else
-  echo "   pubspec:    version: ${BUILD_NAME}+${DEV_BUILD_NUMBER} (после успешной загрузки)"
+  printf "$MSG_RUN_SUMMARY_PUBSPEC_SINGLE\n" "${BUILD_NAME}" "${DEV_BUILD_NUMBER}"
 fi
 echo
 if [[ -n "${WIZARD_SKIP_FINAL_CONFIRM:-}" && "${WIZARD_SKIP_FINAL_CONFIRM}" == "1" ]]; then
-  echo "   ▶️  Запуск (подтверждение пропущено по wizard.env)"
+  echo "$MSG_RUN_FINAL_CONFIRM_SKIPPED"
 else
-  read -r -p "▶️  Поехали? (y/n) [y]: " cont
-  case "${cont:-Y}" in n|N|no|NO) echo "   Отменено."; exit 0 ;; esac
+  printf "%s" "$MSG_RUN_FINAL_CONFIRM_PROMPT"
+  read -r cont
+  case "${cont:-Y}" in n|N|no|NO) echo "$MSG_RUN_FINAL_CANCELLED"; exit 0 ;; esac
 fi
 
 mkdir -p "$UPLOAD_LOG_DIR" "$UPLOAD_STATE_DIR"
 rm -f "$UPLOAD_STATE_DIR/pubspec_updated_to.txt" || true
 
 echo
-echo "🔧 flutter pub get..."
+echo "$MSG_RUN_STEP_FLUTTER_PUB_GET"
 uploadtool_run_cmd flutter pub get
 
 supports_no_pub=0
@@ -759,35 +772,34 @@ build_ios() {
   uploadtool_build_ios "$@"
 }
 
-# Запускает интерактивный fastlane spaceauth и сохраняет FASTLANE_SESSION
-# в локальный файл, чтобы фоновые загрузки не просили код 2FA "в никуда".
+# Runs fastlane spaceauth interactively and stores FASTLANE_SESSION locally to avoid 2FA prompts mid-upload.
 uploadtool_fastlane_ensure_session() {
-  # Нужна только для iOS-загрузок и только если мастер запущен в интерактивном терминале.
+  # Required only for iOS uploads and only when the wizard runs in an interactive terminal.
   if [[ "${UPLOAD_IOS:-0}" -ne 1 ]]; then
     return 0
   fi
   if [[ ! -t 0 ]]; then
-    # В CI или при неинтерактивном запуске не трогаем авторизацию.
+    # Skip authorization in CI or non-interactive shells.
     return 0
   fi
-  # При авторизации по API-ключу App Store Connect сессия не нужна.
+  # API key auth does not require a session.
   if [[ -n "${ASC_KEY_ID:-}" ]]; then
     return 0
   fi
-  # Нужен FASTLANE_USER, иначе fastlane spaceauth не имеет смысла.
+  # FASTLANE_USER is required for spaceauth.
   if [[ -z "${FASTLANE_USER:-}" ]]; then
     return 0
   fi
-  # Если fastlane_root не определён — тоже выходим.
+  # Abort if fastlane root is not configured.
   if [[ -z "${UPLOADTOOL_FASTLANE_ROOT:-}" || ! -d "$UPLOADTOOL_FASTLANE_ROOT" ]]; then
     return 0
   fi
 
   echo
-  echo "🔐 Проверка авторизации fastlane (spaceauth)..."
-  echo "   Apple ID: ${FASTLANE_USER}"
-  echo "   Если сессия ещё действует — запроса пароля не будет."
-  echo "   (Пароль можно задать в release.env: FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD)"
+  echo "$MSG_RUN_SPACEAUTH_TITLE"
+  printf "$MSG_RUN_SPACEAUTH_APPLE_ID\n" "${FASTLANE_USER}"
+  echo "$MSG_RUN_SPACEAUTH_HINT_SESSION"
+  echo "$MSG_RUN_SPACEAUTH_HINT_PASSWORD_ENV"
   echo
 
   local tmp_log
@@ -795,8 +807,8 @@ uploadtool_fastlane_ensure_session() {
   local had_session="0"
   [[ -n "${FASTLANE_SESSION:-}" ]] && had_session="1"
 
-  # Запуск spaceauth в PTY (script), чтобы fastlane при необходимости мог запросить пароль/2FA.
-  # Синтаксис script -q <file> <command> проверен на macOS (BSD script); на Linux (GNU script) может отличаться.
+  # Run spaceauth inside PTY (script) so fastlane can prompt for password/2FA when needed.
+  # script -q syntax verified on macOS (BSD); GNU script may differ.
   _run_spaceauth() {
     export UPLOADTOOL_FASTLANE_ROOT FASTLANE_USER
     script -q "$tmp_log" bash -c 'cd "$UPLOADTOOL_FASTLANE_ROOT" && export BUNDLE_GEMFILE="$UPLOADTOOL_FASTLANE_ROOT/Gemfile" && bundle exec fastlane spaceauth -u "$FASTLANE_USER"'
@@ -805,39 +817,39 @@ uploadtool_fastlane_ensure_session() {
   _run_spaceauth
   local spaceauth_rc=$?
 
-  # Если первая попытка с текущей сессией не удалась и сессия была — значит протухла, пробуем заново без неё.
+  # If the first attempt fails while a session existed, retry without it.
   if [[ "$spaceauth_rc" -ne 0 && "$had_session" == "1" ]]; then
-    echo "   Сессия протухла, повторный вход (введи пароль/2FA при запросе)..."
+    echo "$MSG_RUN_SPACEAUTH_SESSION_EXPIRED"
     unset FASTLANE_SESSION
     _run_spaceauth
     spaceauth_rc=$?
   fi
 
   if [[ "$spaceauth_rc" -ne 0 ]]; then
-    echo "   ❌ spaceauth завершился с кодом $spaceauth_rc (проверь логин/пароль и 2FA)." >&2
+    printf "$MSG_RUN_ERR_SPACEAUTH_FAILED\n" "$spaceauth_rc" >&2
     rm -f "$tmp_log"
     return 1
   fi
 
-  # В выводе spaceauth ищем именно строку export FASTLANE_SESSION='...' (не "Pass the following via the...")
+  # Parse the exact export FASTLANE_SESSION line from spaceauth output.
   local env_line
   env_line="$(grep 'export FASTLANE_SESSION=' "$tmp_log" | tail -n 1 || true)"
   rm -f "$tmp_log"
 
   if [[ -z "$env_line" ]]; then
-    echo "   ⚠️  Не удалось найти export FASTLANE_SESSION в выводе fastlane spaceauth." >&2
-    echo "       Продолжаем без автосохранения сессии." >&2
+    echo "$MSG_RUN_ERR_SPACEAUTH_NO_SESSION_LINE" >&2
+    echo "$MSG_RUN_SPACEAUTH_CONTINUE_WITHOUT_SAVE" >&2
     return 0
   fi
 
-  # Уберём ведущие пробелы и префикс export, отрежем хвост после точки с запятой.
+  # Remove leading spaces/export prefix; trim trailing commands.
   env_line="$(echo "$env_line" | sed -E 's/^[[:space:]]*export[[:space:]]+//')"
   env_line="${env_line%%;*}"
 
   if [[ "$env_line" != FASTLANE_SESSION=* ]]; then
-    echo "   ⚠️  Строка с сессией имеет неожиданный формат:" >&2
+    echo "$MSG_RUN_ERR_SPACEAUTH_UNEXPECTED_SESSION_FORMAT" >&2
     echo "       $env_line" >&2
-    echo "       Продолжаем без автосохранения." >&2
+    echo "$MSG_RUN_SPACEAUTH_CONTINUE_WITHOUT_SAVE" >&2
     return 0
   fi
 
@@ -845,23 +857,22 @@ uploadtool_fastlane_ensure_session() {
   printf '%s\n' "$env_line" >"$FASTLANE_SESSION_FILE"
   chmod 600 "$FASTLANE_SESSION_FILE" 2>/dev/null || true
 
-  # Подхватим новую сессию в текущем процессе.
+  # Load the new session into current shell.
   eval "$env_line"
-  echo "   ✅ FASTLANE_SESSION обновлён и сохранён в:"
+  echo "$MSG_RUN_SPACEAUTH_SESSION_SAVED"
   echo "      $FASTLANE_SESSION_FILE"
   return 0
 }
 
 echo
-echo "⚙️  Подготовка fastlane (bundle install)..."
+echo "$MSG_RUN_STEP_FASTLANE_PREPARE"
 if [[ "${UPLOAD_IOS:-0}" -eq 1 || "${UPLOAD_ANDROID:-0}" -eq 1 ]]; then
   require_cmd bundle
   uploadtool_run_cmd_in_dir "$UPLOADTOOL_FASTLANE_ROOT" bundle install --path vendor/bundle
-  # После установки fastlane прогоняем интерактивный spaceauth (если актуально),
-  # чтобы FASTLANE_SESSION был валиден ещё до фоновых загрузок.
+  # After installing fastlane dependencies, refresh spaceauth (when applicable) before background uploads.
   uploadtool_fastlane_ensure_session || exit 1
 else
-  echo "   Пропущено: загрузка в сторы выключена"
+  echo "$MSG_RUN_STEP_FASTLANE_SKIPPED"
 fi
 
 UPLOAD_STATUS_FILES=()
@@ -877,8 +888,7 @@ wait_for_all_uploads() {
   uploadtool_wait_for_all_uploads
 }
 
-# Проверяет, что хотя бы одна загрузка из UPLOAD_STATUS_FILES успешна (rc=0).
-# Нужно для обновления pubspec даже при частичном провале (чтобы не терять версию).
+# Returns true if at least one upload succeeded (rc=0). Keeps pubspec in sync even on partial failures.
 at_least_one_upload_succeeded() {
   uploadtool_at_least_one_upload_succeeded
 }
@@ -895,16 +905,13 @@ run_for_env() {
 UPLOAD_OR_BUILD_FAILED=0
 
 if [[ "$ENV_TARGETS" == "both" ]]; then
-  # Сборки dev и prod по очереди (run_for_env вызываются последовательно), чтобы оба не
-  # писали в один build/ — иначе артефакт dev может оказаться от prod. Загрузки ждать здесь
-  # не обязательно: после сборок артефакты уже в state/dev и state/prod, все 4 загрузки
-  # стартуют и в конце ждём их одной wait_for_all_uploads.
+  # Sequential dev/prod builds keep build/ artifacts isolated; uploads run asynchronously and sync later.
   run_for_env "dev" "$DEV_BUILD_NUMBER" 1 || exit 1
   run_for_env "prod" "$PROD_BUILD_NUMBER" 1 || exit 1
   if ! wait_for_all_uploads; then
     UPLOAD_OR_BUILD_FAILED=1
     echo
-    echo "   ❌ Часть загрузок не удалась. Логи:"
+    echo "$MSG_RUN_ERR_UPLOADS_PARTIALLY_FAILED"
     [[ -f "$UPLOAD_LOG_DIR/dev_ios_upload.log" ]] && echo "   ---- iOS (dev) ----" && tail -n 80 "$UPLOAD_LOG_DIR/dev_ios_upload.log" || true
     [[ -f "$UPLOAD_LOG_DIR/dev_android_upload.log" ]] && echo "   ---- Android (dev) ----" && tail -n 80 "$UPLOAD_LOG_DIR/dev_android_upload.log" || true
     [[ -f "$UPLOAD_LOG_DIR/prod_ios_upload.log" ]] && echo "   ---- iOS (prod) ----" && tail -n 80 "$UPLOAD_LOG_DIR/prod_ios_upload.log" || true
@@ -916,21 +923,23 @@ else
   fi
 fi
 
-# Обновляем pubspec, если хотя бы одна загрузка прошла — чтобы не терять версию при падении одной из OS.
+# Update pubspec when at least one upload succeeds to avoid losing version bumps.
 if [[ "$UPLOAD_IOS" -eq 1 || "$UPLOAD_ANDROID" -eq 1 ]]; then
   if at_least_one_upload_succeeded; then
+    local update_reason="$MSG_RUN_PUBSPEC_REASON_ALL_SUCCESS"
+    [[ "$UPLOAD_OR_BUILD_FAILED" -eq 1 ]] && update_reason="$MSG_RUN_PUBSPEC_REASON_PARTIAL_SUCCESS"
     if [[ "$ENV_TARGETS" == "both" ]]; then
-      update_pubspec_version "$PROD_BUILD_NUMBER" "$([[ "$UPLOAD_OR_BUILD_FAILED" -eq 1 ]] && echo "часть загрузок успешна" || echo "all uploads succeeded")"
+      update_pubspec_version "$PROD_BUILD_NUMBER" "$update_reason"
     else
-      update_pubspec_version "$DEV_BUILD_NUMBER" "$([[ "$UPLOAD_OR_BUILD_FAILED" -eq 1 ]] && echo "часть загрузок успешна" || echo "all uploads succeeded")"
+      update_pubspec_version "$DEV_BUILD_NUMBER" "$update_reason"
     fi
   fi
 fi
 
 echo
 if [[ "$UPLOAD_OR_BUILD_FAILED" -eq 1 ]]; then
-  echo "⚠️  Завершено с ошибками (часть сборок/загрузок не удалась)."
+  echo "$MSG_RUN_DONE_WITH_ERRORS"
   exit 1
 fi
-echo "🎉 Готово!"
+echo "$MSG_RUN_DONE_OK"
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-TEST_DESCRIPTION="env.json: запись APP_ENV и сохранение остальных ключей (с backward-compat)"
+TEST_DESCRIPTION="env.json: write APP_ENV and preserve other keys (with backward compat)"
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPLOAD_TOOL_DIR="$(cd "${TEST_DIR}/.." && pwd)"
@@ -38,8 +38,8 @@ assert_file_exists "$path" || _failed=1
 # validate JSON contains updated env and keeps base url
 got_env="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("APP_ENV","") )' "$path" 2>/dev/null || true)"
 got_url="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("BASE_URL","") )' "$path" 2>/dev/null || true)"
-check assert_eq "dev" "$got_env" "APP_ENV должен обновиться"
-check assert_eq "https://x" "$got_url" "BASE_URL должен сохраниться"
+check assert_eq "dev" "$got_env" "APP_ENV should update"
+check assert_eq "https://x" "$got_url" "BASE_URL should be preserved"
 
 # Backward compatibility: keep CHOYS_ENV if file already uses it
 path2="${_tmp}/env_legacy.json"
@@ -52,9 +52,9 @@ uploadtool_write_env_to_file "$path2" "dev"
 got_env2="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("CHOYS_ENV",""))' "$path2" 2>/dev/null || true)"
 got_url2="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("CHOYS_BASE_URL",""))' "$path2" 2>/dev/null || true)"
 got_new_key="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("APP_ENV",""))' "$path2" 2>/dev/null || true)"
-check assert_eq "dev" "$got_env2" "CHOYS_ENV должен обновиться в legacy-файле"
-check assert_eq "https://legacy" "$got_url2" "CHOYS_BASE_URL должен сохраниться в legacy-файле"
-check assert_eq "" "$got_new_key" "APP_ENV не должен появляться в legacy-файле"
+check assert_eq "dev" "$got_env2" "CHOYS_ENV should update in legacy file"
+check assert_eq "https://legacy" "$got_url2" "CHOYS_BASE_URL should be preserved in legacy file"
+check assert_eq "" "$got_new_key" "APP_ENV should not appear in legacy file"
 
 rm -rf "${_tmp}"
 

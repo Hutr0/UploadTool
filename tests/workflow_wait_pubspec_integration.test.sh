@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 
-TEST_DESCRIPTION="Workflow: ожидание загрузок + обновление pubspec версии (интеграция)"
+TEST_DESCRIPTION="Workflow: wait for uploads + update pubspec version"
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPLOAD_TOOL_DIR="$(cd "${TEST_DIR}/.." && pwd)"
 
 # shellcheck disable=SC1090
 source "${UPLOAD_TOOL_DIR}/lib/infra/time.sh"
+# shellcheck disable=SC1090
+source "${UPLOAD_TOOL_DIR}/lib/i18n/en.sh"
 # shellcheck disable=SC1090
 source "${UPLOAD_TOOL_DIR}/lib/workflow.sh"
 
@@ -51,12 +53,12 @@ YAML
 
   # pubspec updated
   got_ver_line="$(grep -E '^version:' "${_tmp}/pubspec.yaml" | head -n 1 | tr -d '\r\n')"
-  check assert_eq "version: 1.0.0+20260221.1.0" "$got_ver_line" "pubspec.yaml version должен обновиться"
+  check assert_eq "version: 1.0.0+20260221.1.0" "$got_ver_line" "pubspec.yaml version should update"
 
   marker="${UPLOAD_STATE_DIR}/pubspec_updated_to.txt"
-  assert_file_exists "$marker" "marker файл должен быть создан" || exit 1
+  assert_file_exists "$marker" "marker file should be created" || exit 1
   marker_content="$(cat "$marker" | tr -d '\r\n')"
-  check assert_eq "1.0.0+20260221.1.0 (test)" "$marker_content" "marker должен содержать итоговую версию и reason"
+  check assert_eq "1.0.0+20260221.1.0 (test)" "$marker_content" "marker should contain resulting version and reason"
 
   # wait_for_all_uploads: polling
   status1="${_tmp}/status1.txt"
@@ -71,10 +73,10 @@ YAML
   }
 
   if ! uploadtool_wait_for_all_uploads; then
-    echo "wait_for_all_uploads должен вернуть 0 когда статус появляется" >&2
+    echo "wait_for_all_uploads should return 0 when status file appears" >&2
     exit 1
   fi
-  check assert_eq "1" "${_sleep_calls}" "должен быть хотя бы один polling sleep"
+  check assert_eq "1" "${_sleep_calls}" "should perform at least one polling sleep"
 
   unset -f uploadtool_sleep_override
 
@@ -86,7 +88,7 @@ YAML
   UPLOAD_STATUS_FILES=("$status_fail" "$status_ok")
   UPLOAD_LABELS=("x" "y")
   if ! uploadtool_at_least_one_upload_succeeded; then
-    echo "at_least_one_upload_succeeded должен вернуть 0 если есть хотя бы один rc=0" >&2
+    echo "at_least_one_upload_succeeded should return 0 when there is at least one rc=0" >&2
     exit 1
   fi
 
@@ -94,7 +96,7 @@ YAML
   UPLOAD_STATUS_FILES=("$status_fail")
   UPLOAD_LABELS=("dev:android")
   if uploadtool_wait_for_all_uploads; then
-    echo "wait_for_all_uploads должен вернуть !=0 когда rc != 0" >&2
+    echo "wait_for_all_uploads should return non-zero when rc != 0" >&2
     exit 1
   fi
 )

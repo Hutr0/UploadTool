@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 
-TEST_DESCRIPTION="Fail-fast: валидация required-полей для upload iOS/Android (регрессия)"
+TEST_DESCRIPTION="Fail-fast: validation of required fields for iOS/Android uploads"
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPLOAD_TOOL_DIR="$(cd "${TEST_DIR}/.." && pwd)"
 
+# shellcheck disable=SC1090
+source "${UPLOAD_TOOL_DIR}/lib/i18n/en.sh"
 # shellcheck disable=SC1090
 source "${UPLOAD_TOOL_DIR}/lib/config.sh"
 

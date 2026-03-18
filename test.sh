@@ -3,8 +3,8 @@ if [ -z "${BASH_VERSION:-}" ]; then
   exec bash "$0" "$@"
 fi
 
-# На macOS /bin/sh часто является bash в POSIX-режиме: там отключены некоторые bash-фичи
-# (например process substitution), и тест-раннер падает. Перезапускаемся в обычный bash.
+# On macOS /bin/sh is often bash in POSIX mode (disabling features like process substitution).
+# Relaunch under regular bash to ensure the runner works.
 if command -v shopt >/dev/null 2>&1; then
   if shopt -oq posix; then
     exec bash "$0" "$@"
@@ -63,28 +63,28 @@ run_test_file() {
 
 print_help() {
   cat <<'EOF'
-🧪 UploadTool — запуск тестов
+🧪 UploadTool — test runner
 
-Использование:
-  ./UploadTool/test.sh                     # все тесты
-  ./UploadTool/test.sh --unit              # только unit
-  ./UploadTool/test.sh --integration       # только integration
-  ./UploadTool/test.sh --smoke             # только smoke
-  ./UploadTool/test.sh --regression        # только regression
-  ./UploadTool/test.sh --pattern "*.test.sh" # произвольный glob по имени
-  ./UploadTool/test.sh --list              # список найденных тестов
+Usage:
+  ./UploadTool/test.sh                     # all tests
+  ./UploadTool/test.sh --unit              # unit only
+  ./UploadTool/test.sh --integration       # integration only
+  ./UploadTool/test.sh --smoke             # smoke only
+  ./UploadTool/test.sh --regression        # regression only
+  ./UploadTool/test.sh --pattern "*.test.sh" # arbitrary glob
+  ./UploadTool/test.sh --list              # list discovered tests
 
-Опции:
-  -v, --verbose     показывать вывод даже для прошедших тестов
-  --fail-fast       остановиться на первом падении
-  -h, --help        помощь
+Options:
+  -v, --verbose     show output even on success
+  --fail-fast       stop on first failure
+  -h, --help        show help
 
-Примечание:
-  Если запускать через `sh`, скрипт сам перезапустится в `bash`.
+Note:
+  When invoked via `sh`, the script relaunches under `bash` automatically.
 
-Интерактивный режим:
+Interactive mode:
   ./UploadTool/test.sh
-  (если не передавать аргументы, появится выбор типа тестирования)
+  (without arguments an interactive selector will appear)
 EOF
 }
 
@@ -115,7 +115,7 @@ test_description_of_file() {
   local desc
   desc="$(sed -nE 's/^TEST_DESCRIPTION="(.*)"$/\1/p' "$f" | head -n 1)"
   if [[ -z "$desc" ]]; then
-    desc="$(sed -nE 's/^# *Описание: *(.*)$/\1/p' "$f" | head -n 1)"
+    desc="$(sed -nE 's/^# *Description: *(.*)$/\1/p' "$f" | head -n 1)"
   fi
   if [[ -n "$desc" ]]; then
     echo "$desc"
@@ -124,46 +124,46 @@ test_description_of_file() {
 
   case "$base" in
     versioning.test.sh)
-      echo "Версионирование: извлечение/инкремент build number, форматирование под env"
+      echo "Versioning: extract/increment build numbers and format env string"
       ;;
     android_version_code.test.sh)
-      echo "Android: вычисление versionCode из build number"
+      echo "Android: compute versionCode from build number"
       ;;
     notes.test.sh)
-      echo "Release notes: формирование текста описания релиза"
+      echo "Release notes: build release description"
       ;;
     runner.test.sh)
-      echo "Infra runner: мок внешних команд и трассировка"
+      echo "Infra runner: mock external commands and tracing"
       ;;
     time.test.sh)
-      echo "Infra time: мок sleep/ожиданий"
+      echo "Infra time: mock sleep/await"
       ;;
     env_json.test.sh)
-      echo "env.json: запись APP_ENV и сохранение остальных ключей"
+      echo "env.json: write APP_ENV and keep other keys"
       ;;
     config.test.sh)
-      echo "Конфиги: выбор и загрузка release.env/wizard.env (регрессия)"
+      echo "Configs: select/load release.env & wizard.env"
       ;;
     config_validation.test.sh)
-      echo "Fail-fast: валидация required-полей для upload iOS/Android (регрессия)"
+      echo "Fail-fast: validate required fields for iOS/Android upload"
       ;;
     workflow_build_integration.test.sh)
-      echo "Workflow: интеграционный тест сборки iOS/Android (flutter аргументы, артефакты)"
+      echo "Workflow: integration test for iOS/Android builds"
       ;;
     workflow_build_and_upload_integration.test.sh)
-      echo "Workflow: интеграционный тест оркестрации build+upload (fastlane вызовы, статусы)"
+      echo "Workflow: integration test for build+upload orchestration"
       ;;
     workflow_wait_pubspec_integration.test.sh)
-      echo "Workflow: ожидание загрузок + обновление pubspec версии (интеграция)"
+      echo "Workflow: wait for uploads + pubspec update"
       ;;
     workflow_run_for_env_integration.test.sh)
-      echo "Workflow: run_for_env (подготовка ENV, build numbers, notes, оркестрация)"
+      echo "Workflow: run_for_env (env prep, build numbers, notes, orchestration)"
       ;;
     run_sh_smoke.test.sh)
-      echo "Smoke: полный прогон run.sh в фейковом репо с моками команд"
+      echo "Smoke: full run.sh run with mocked commands"
       ;;
     *)
-      echo "(описание не задано)"
+      echo "(no description)"
       ;;
   esac
 }
@@ -209,17 +209,17 @@ prompt_yes_no() {
 }
 
 run_wizard() {
-  >&2 echo "🧙 Выбор режима тестирования:"
-  >&2 echo "   1) Все тесты"
+  >&2 echo "🧙 Select test mode:"
+  >&2 echo "   1) All"
   >&2 echo "   2) Unit"
   >&2 echo "   3) Integration"
   >&2 echo "   4) Smoke"
   >&2 echo "   5) Regression"
-  >&2 echo "   6) По шаблону (glob)"
+  >&2 echo "   6) Custom glob"
   >&2 echo
 
   local choice
-  read -r -p "Выбери режим [1]: " choice
+  read -r -p "Choice [1]: " choice
   choice="${choice:-1}"
 
   local suite="all"
@@ -233,23 +233,23 @@ run_wizard() {
     5) suite="regression" ;;
     6)
       suite="all"
-      read -r -p "Введи glob (пример: *.test.sh): " pattern
-      [[ -n "$pattern" ]] || fail "Пустой glob" 
+      read -r -p "Enter glob (e.g. *.test.sh): " pattern
+      [[ -n "$pattern" ]] || fail "Empty glob" 
       ;;
-    *) fail "Неверный выбор: $choice" ;;
+    *) fail "Invalid choice: $choice" ;;
   esac
 
   local verbose
-  verbose="$(prompt_yes_no "Показывать вывод успешных тестов?" "n")"
+  verbose="$(prompt_yes_no "Show output for successful tests?" "n")"
   local ff
-  ff="$(prompt_yes_no "Остановиться на первом падении?" "n")"
+  ff="$(prompt_yes_no "Stop on first failure?" "n")"
 
   if [[ "$verbose" -eq 1 ]]; then
     export UPLOADTOOL_TEST_VERBOSE=1
   fi
 
   >&2 echo
-  >&2 echo "📋 Выбрано:"
+  >&2 echo "📋 Selected:"
   >&2 echo "   📦 suite:   $suite"
   [[ -n "$pattern" ]] && >&2 echo "   🔎 pattern: $pattern"
   >&2 echo "   🧾 verbose: ${UPLOADTOOL_TEST_VERBOSE:-0}"
@@ -262,10 +262,10 @@ run_wizard() {
   done < <(collect_test_files "$suite" "$pattern")
 
   if [[ "${#wizard_files[@]}" -eq 0 ]]; then
-    fail "Тесты не найдены в $TESTS_DIR"
+    fail "Tests not found in $TESTS_DIR"
   fi
 
-  >&2 echo "🗂️  Найденные тесты (${#wizard_files[@]}):"
+  >&2 echo "🗂️  Discovered tests (${#wizard_files[@]}):"
   local i
   for i in "${!wizard_files[@]}"; do
     local tf="${wizard_files[$i]}"
@@ -274,14 +274,14 @@ run_wizard() {
   >&2 echo
 
   local run_all
-  run_all="$(prompt_yes_no "Запустить все найденные тесты?" "Y")"
+  run_all="$(prompt_yes_no "Run all discovered tests?" "Y")"
 
   local selected_list_file=""
   if [[ "$run_all" -ne 1 ]]; then
     local sel
-    read -r -p "Введи номера (пример: 1,3,5-7): " sel
+    read -r -p "Enter indices (e.g. 1,3,5-7): " sel
     sel="${sel//[[:space:]]/}"
-    [[ -n "$sel" ]] || fail "Пустой список"
+    [[ -n "$sel" ]] || fail "Empty selection"
 
     local selected=()
     local token
@@ -289,12 +289,12 @@ run_wizard() {
     for token in "${_tokens[@]}"; do
       if [[ "$token" =~ ^[0-9]+$ ]]; then
         local n="$token"
-        [[ "$n" -ge 1 && "$n" -le "${#wizard_files[@]}" ]] || fail "Неверный номер: $n"
+        [[ "$n" -ge 1 && "$n" -le "${#wizard_files[@]}" ]] || fail "Invalid index: $n"
         selected+=("${wizard_files[$((n - 1))]}")
       elif [[ "$token" =~ ^([0-9]+)-([0-9]+)$ ]]; then
         local a="${BASH_REMATCH[1]}"
         local b="${BASH_REMATCH[2]}"
-        [[ "$a" -ge 1 && "$b" -ge 1 && "$a" -le "${#wizard_files[@]}" && "$b" -le "${#wizard_files[@]}" ]] || fail "Неверный диапазон: $token"
+        [[ "$a" -ge 1 && "$b" -ge 1 && "$a" -le "${#wizard_files[@]}" && "$b" -le "${#wizard_files[@]}" ]] || fail "Invalid range: $token"
         if [[ "$a" -gt "$b" ]]; then
           local tmp="$a"; a="$b"; b="$tmp"
         fi
@@ -303,18 +303,17 @@ run_wizard() {
           selected+=("${wizard_files[$((n - 1))]}")
         done
       else
-        fail "Неверный формат: $token"
+        fail "Invalid format: $token"
       fi
     done
 
     selected_list_file="$(mktemp)"
     printf '%s\n' "${selected[@]}" >"$selected_list_file"
-    >&2 echo "🎯 Выбрано тестов: ${#selected[@]}"
+    >&2 echo "🎯 Selected tests: ${#selected[@]}"
     >&2 echo
   fi
 
-  # Возвращаем значения через stdout (4 строки)
-  # 1) suite 2) pattern 3) fail-fast 4) optional file with selected tests
+  # Return values via stdout (4 lines): suite, pattern, fail-fast, optional file with selected tests
   printf '%s\n' "$suite" "$pattern" "$ff" "$selected_list_file"
 }
 
@@ -349,10 +348,10 @@ main() {
       --regression) suite="regression"; shift ;;
       --pattern)
         pattern="${2:-}"
-        [[ -n "$pattern" ]] || fail "Не указан аргумент для --pattern"
+        [[ -n "$pattern" ]] || fail "Missing argument for --pattern"
         shift 2
         ;;
-      --*) fail "Неизвестная опция: $1" ;;
+      --*) fail "Unknown option: $1" ;;
       *)
         pattern="$1"
         shift
@@ -372,7 +371,7 @@ main() {
     done < <(collect_test_files "$suite" "$pattern")
   fi
 
-  [[ "${#files[@]}" -gt 0 ]] || fail "Тесты не найдены в $TESTS_DIR"
+  [[ "${#files[@]}" -gt 0 ]] || fail "Tests not found in $TESTS_DIR"
 
   if [[ "$list_only" -eq 1 ]]; then
     local f
@@ -385,7 +384,7 @@ main() {
   local started
   started="$(date +%s)"
 
-  echo "🧪 UploadTool: запуск тестов"
+  echo "🧪 UploadTool: running tests"
   echo "   📦 suite:   $suite"
   [[ -n "$pattern" ]] && echo "   🔎 pattern: $pattern"
   echo "   🧾 files:   ${#files[@]}"
@@ -414,17 +413,17 @@ main() {
   local elapsed
   elapsed=$(( $(date +%s) - started ))
 
-  echo "📊 Итог:"
+  echo "📊 Summary:"
   echo "   ✅ Passed: $passed"
   echo "   ❌ Failed: $failed"
   echo "   ⏱️  Time:   ${elapsed}s"
 
   if [[ "$failed" -eq 0 ]]; then
-    echo "🎉 Все тесты прошли"
+    echo "🎉 All tests passed"
     return 0
   fi
 
-  echo "💥 Есть упавшие тесты" >&2
+  echo "💥 Some tests failed" >&2
   return 1
 }
 

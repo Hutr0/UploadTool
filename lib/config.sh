@@ -52,7 +52,7 @@ uploadtool_validate_config() {
       app_id="${APP_IDENTIFIER:-}"
     fi
     if [[ -z "$app_id" ]]; then
-      errors+=("[iOS] Не задан IOS_APP_IDENTIFIER (или APP_IDENTIFIER) в release.env")
+      errors+=("$MSG_CONFIG_ERR_IOS_APP_ID_MISSING")
     fi
 
     if [[ -n "${ASC_KEY_ID:-}" && -n "${ASC_ISSUER_ID:-}" && -n "${ASC_KEY_PATH:-}" ]]; then
@@ -63,14 +63,14 @@ uploadtool_validate_config() {
     fi
 
     if [[ "$has_asc" -ne 1 && "$has_apple_id" -ne 1 ]]; then
-      errors+=("[iOS] Не хватает кредов для TestFlight. Укажи либо ASC_KEY_ID+ASC_ISSUER_ID+ASC_KEY_PATH, либо FASTLANE_USER+FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD в release.env")
+      errors+=("$MSG_CONFIG_ERR_IOS_CREDS_MISSING")
     fi
 
     if [[ "$has_asc" -eq 1 ]]; then
       local p="${ASC_KEY_PATH}"
       if [[ "$p" == ~/* ]]; then p="$HOME/${p#~/}"; fi
       if [[ ! -f "$p" ]]; then
-        errors+=("[iOS] Файл ASC_KEY_PATH не найден: $p")
+        errors+=($(printf "$MSG_CONFIG_ERR_IOS_ASC_KEY_MISSING" "$p"))
       fi
     fi
   fi
@@ -81,7 +81,7 @@ uploadtool_validate_config() {
       package_name="${APP_PACKAGE_NAME:-}"
     fi
     if [[ -z "$package_name" ]]; then
-      errors+=("[Android] Не задан ANDROID_PACKAGE_NAME (или APP_PACKAGE_NAME) в release.env")
+      errors+=("$MSG_CONFIG_ERR_ANDROID_PACKAGE_MISSING")
     fi
 
     local json_key_path="${PLAY_JSON_KEY_PATH:-}"
@@ -89,18 +89,18 @@ uploadtool_validate_config() {
       json_key_path="${SUPPLY_JSON_KEY:-}"
     fi
     if [[ -z "$json_key_path" ]]; then
-      errors+=("[Android] Не хватает кредов для Google Play. Укажи PLAY_JSON_KEY_PATH (или SUPPLY_JSON_KEY) в release.env")
+      errors+=("$MSG_CONFIG_ERR_ANDROID_CREDS_MISSING")
     else
       if [[ "$json_key_path" == ~/* ]]; then json_key_path="$HOME/${json_key_path#~/}"; fi
       if [[ ! -f "$json_key_path" ]]; then
-        errors+=("[Android] Файл ключа Google Play не найден: $json_key_path")
+        errors+=($(printf "$MSG_CONFIG_ERR_ANDROID_KEY_FILE_MISSING" "$json_key_path"))
       fi
     fi
   fi
 
   if [[ "${#errors[@]}" -ne 0 ]]; then
     echo
-    echo "❌ Ошибка конфигурации release.env:"
+    echo "$MSG_RUN_ERR_CONFIG_RELEASE_ENV"
     local e
     for e in "${errors[@]}"; do
       echo "   - $e"

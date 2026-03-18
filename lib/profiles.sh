@@ -114,7 +114,7 @@ uploadtool_prompt_select_profile() {
   fi
 
   echo >&2
-  echo "📦 Найдены сохранённые проекты:" >&2
+  echo "$MSG_PROFILES_SAVED_LIST_TITLE" >&2
 
   local i=0
   local arr=()
@@ -128,7 +128,8 @@ uploadtool_prompt_select_profile() {
 
   echo >&2
   local choice
-  read -r -p "Выбери проект [1]: " choice
+  printf '%s' "$MSG_PROFILES_PROMPT_SELECT" >&2
+  read -r choice
   choice="${choice:-1}"
   if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
     echo "";

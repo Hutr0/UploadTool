@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-TEST_DESCRIPTION="Конфиги: выбор и загрузка release.env/wizard.env (регрессия)"
+TEST_DESCRIPTION="Configs: select and load release.env/wizard.env (regression)"
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPLOAD_TOOL_DIR="$(cd "${TEST_DIR}/.." && pwd)"

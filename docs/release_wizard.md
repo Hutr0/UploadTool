@@ -1,33 +1,33 @@
-## Релиз‑мастер (UploadTool): iOS + Android
+## Release wizard (UploadTool): iOS + Android
 
-Это тот самый интерактивный мастер, который берёт тебя за руку и доводит до результата:
+This is the interactive wizard that guides you from “nothing” to a shipped build:
 
-- **собирает** iOS (`.ipa`) и Android (`.aab`)
-- по желанию **загружает** iOS в TestFlight и Android в Google Play
-- умеет делать iOS+Android **параллельно** (чтобы не ждать лишнего)
-- после успешной публикации обновляет версию в `pubspec.yaml` (`version: <name>+<number>`)
+- **builds** iOS (`.ipa`) and Android (`.aab`)
+- optionally **uploads** iOS to TestFlight and Android to Google Play
+- can build/upload iOS and Android **in parallel**
+- after successful uploads, updates the version in `pubspec.yaml` (`version: <name>+<number>`)
 
-И да — теперь UploadTool можно держать как внутри проекта, так и отдельно (в другом репозитории).
+UploadTool can live either inside the project or in a separate repository.
 
-### Точки входа
+### Entry points
 
-- `./run.sh` — запуск мастера из репозитория UploadTool
-- `./run.sh ios|android|both` — запуск с предвыбранной платформой
+- `./run.sh` — run the wizard from the UploadTool repo
+- `./run.sh ios|android|both` — run with pre‑selected platform
 
-Если UploadTool подключён как папка `./UploadTool` внутри Flutter‑проекта:
+If UploadTool is connected as `./UploadTool` folder inside a Flutter project:
 
-- `./UploadTool/run.sh` — запуск мастера напрямую
-- `./UploadTool/run.sh ios|android|both` — запуск с предвыбранной платформой
+- `./UploadTool/run.sh` — run the wizard directly
+- `./UploadTool/run.sh ios|android|both` — run with a pre‑selected platform
 
-Если UploadTool лежит **в другом месте**, запускай так:
+If UploadTool lives **elsewhere**, run:
 
 ```bash
 bash /path/to/UploadTool/run.sh --project-root /path/to/flutter_project --config-dir /path/to/flutter_project/.uploadtool
 ```
 
-### Где живут конфиги
+### Where configs live
 
-Рекомендуемая схема для «бесшовного подключения» к разным проектам — хранить локальные конфиги рядом с Flutter‑проектом:
+Recommended “seamless” layout — keep local configs next to the Flutter project:
 
 ```text
 <flutter_project>/
@@ -37,52 +37,52 @@ bash /path/to/UploadTool/run.sh --project-root /path/to/flutter_project --config
     env.json
 ```
 
-UploadTool выбирает конфиг‑директорию так:
+UploadTool chooses the config directory as follows:
 
-- если передан `--config-dir` (или задан `UPLOADTOOL_CONFIG_DIR`) — берёт её
-- иначе, если определён Flutter‑проект (найден `pubspec.yaml`) — использует `<project>/.uploadtool` (и создаёт директорию при необходимости)
-- иначе — использует `config/` рядом с `run.sh`
+- if `--config-dir` (or `UPLOADTOOL_CONFIG_DIR`) is provided — use it
+- else, if a Flutter project is detected (via `pubspec.yaml`) — use `<project>/.uploadtool` (and create it if needed)
+- else — use `config/` next to `run.sh`
 
-Логи и state по умолчанию живут рядом с конфигами:
+Logs and state by default live next to configs:
 
-- `UPLOAD_LOG_DIR`: `<config-dir>/logs` (можно переопределить через `UPLOADTOOL_LOG_DIR`)
-- `UPLOAD_STATE_DIR`: `<config-dir>/state` (можно переопределить через `UPLOADTOOL_STATE_DIR`)
+- `UPLOAD_LOG_DIR`: `<config-dir>/logs` (override via `UPLOADTOOL_LOG_DIR`)
+- `UPLOAD_STATE_DIR`: `<config-dir>/state` (override via `UPLOADTOOL_STATE_DIR`)
 
-Чтобы автоматически создать `.uploadtool/` и разложить туда шаблоны конфигов, можно использовать:
+To automatically create `.uploadtool/` and copy template configs, you can use:
 
 - `./run.sh init --project-root /path/to/flutter_project`
 
-Если хочется запускать UploadTool без постоянной передачи `--project-root/--config-dir`, можно сохранить дефолты:
+If you want to run UploadTool without passing `--project-root/--config-dir` every time, you can save defaults:
 
 - `./run.sh init --project-root /path/to/flutter_project --save-defaults`
 
-Формат файла дефолтов: `config/cli.env.example`.
+The defaults file format is described in `config/cli.env.example`.
 
-### 1) Окружение приложения (dev/prod) — `env.json`
+### 1) Application environment (dev/prod) — `env.json`
 
-`env.json` — это dart‑defines, которые попадут в Flutter сборку через `--dart-define-from-file`.
+`env.json` is a JSON file with dart‑defines that are passed into Flutter builds via `--dart-define-from-file`.
 
-Поддерживаемые ключи (пример для универсального использования):
+Typical keys:
 
-- `APP_ENV`: `dev` или `prod`
-- `BASE_URL`: опционально (если твоё приложение умеет его читать)
+- `APP_ENV`: `dev` or `prod`
+- `BASE_URL`: optional (if your app reads it)
 
-Важно: UploadTool **не навязывает** твоему приложению конкретные ключи. По умолчанию мастер пишет ключ `APP_ENV`.
+Important: UploadTool **does not impose** a specific key set on your app. By default, the wizard writes `APP_ENV`.
 
-Мастер перед сборкой **использует** `env.json` из директории конфигов (например, `.uploadtool/env.json`) как базу.
+Before each build, the wizard **uses** `env.json` from the config directory (for example `.uploadtool/env.json`) as a base.
 
-Перед каждой сборкой он создаёт пер‑окруженческий файл:
+For each environment it creates a per‑env file:
 
 - `state/<env>/dart_defines.json`
 
-Алгоритм такой:
+Algorithm:
 
-- копируем текущий `env.json` в `state/<env>/dart_defines.json` (чтобы не потерять остальные ключи, например `BASE_URL`)
-- затем обновляем в `state/<env>/dart_defines.json` ключ окружения (`APP_ENV`/`CHOYS_ENV`/или ключ из `UPLOADTOOL_ENV_JSON_ENV_KEY`) на `dev` или `prod`
+- copy current `env.json` into `state/<env>/dart_defines.json` (to keep all other keys such as `BASE_URL`)
+- update the environment key in `state/<env>/dart_defines.json` (`APP_ENV` / `CHOYS_ENV` / custom key from `UPLOADTOOL_ENV_JSON_ENV_KEY`) to `dev` or `prod`
 
-Это сделано специально, чтобы при сценарии `dev + prod` две сборки не перетирали общий файл и не читали “не своё” окружение.
+This is done specifically so that in the `dev + prod` scenario the two builds do not overwrite a shared file and do not read each other’s environment.
 
-Минимальный пример (Flutter/Dart), как читать эти значения в приложении:
+Minimal Flutter/Dart example of reading these values:
 
 ```dart
 const appEnv = String.fromEnvironment('APP_ENV', defaultValue: 'prod');
@@ -91,93 +91,91 @@ const baseUrl = String.fromEnvironment('BASE_URL', defaultValue: 'https://exampl
 bool get isProd => appEnv == 'prod';
 ```
 
-Пример привязки поведения и отображения версии к окружению (минимально):
+Minimal behavior binding example:
 
 ```dart
-// Показывай бейдж окружения, включай/выключай фичи, меняй логирование и т.п.
+// Show env badge, toggle features, logging, etc.
 final showDebugTools = appEnv != 'prod';
 
-// Версию и build number обычно берут из pubspec через package_info_plus,
-// а окружение — из dart-defines.
+// Version and build number usually come from pubspec via package_info_plus,
+// while environment comes from dart-defines.
 final aboutText = 'env=$appEnv';
 ```
 
-Если тебе нужна совместимость с существующим проектом:
+If you need compatibility with an existing project:
 
-- если файл уже содержит `CHOYS_ENV` (и не содержит `APP_ENV`) — UploadTool продолжит обновлять именно `CHOYS_ENV`
-- можно явно задать ключ через `UPLOADTOOL_ENV_JSON_ENV_KEY` (например, `UPLOADTOOL_ENV_JSON_ENV_KEY=MY_ENV`)
+- if the file already contains `CHOYS_ENV` (and not `APP_ENV`) — UploadTool will keep updating `CHOYS_ENV`
+- you can explicitly set the key via `UPLOADTOOL_ENV_JSON_ENV_KEY` (for example `UPLOADTOOL_ENV_JSON_ENV_KEY=MY_ENV`)
 
-Если выбираешь `dev + prod`, мастер делает две публикации подряд:
+If you select `dev + prod`, the wizard performs two consecutive releases:
 
-- build number используется в формате `YYYYMMDD.N.X`, где `X`: `dev=0`, `prod=1`
-- dev публикуется как `YYYYMMDD.N.0` (пример: `20260220.1.0`)
-- prod — ядро `YYYYMMDD.N` на 1 больше + `.1` (пример: dev `20260220.1.0` → prod `20260220.2.1`)
+- build number is in the form `YYYYMMDD.N.X`, where `X`: `dev=0`, `prod=1`
+- dev is published as `YYYYMMDD.N.0` (e.g. `20260220.1.0`)
+- prod uses core `YYYYMMDD.N` incremented by 1 and suffix `.1` (e.g. dev `20260220.1.0` → prod `20260220.2.1`)
 
-### 1.1) State и retention артефактов сборки
+### 1.1) State and artifacts retention
 
-После сборки UploadTool копирует артефакты в state:
+After building, UploadTool copies artifacts into state:
 
 - iOS: `state/<env>/artifacts/app-<env>-<BUILD_NUMBER>.ipa`
 - Android: `state/<env>/artifacts/app-<env>-<BUILD_NUMBER>.aab`
 
-Чтобы директория `state/` не разрасталась, включён retention:
+To avoid unbounded growth of `state/`, retention is enabled:
 
-- для каждого окружения (`dev`/`prod`) хранится только последние `3` `.ipa` и последние `3` `.aab`
-- количество можно изменить переменной `UPLOADTOOL_STATE_ARTIFACTS_KEEP` (например, `UPLOADTOOL_STATE_ARTIFACTS_KEEP=5`)
+- for each environment (`dev` / `prod`) only the last `3` `.ipa` and last `3` `.aab` are kept
+- you can change the number via `UPLOADTOOL_STATE_ARTIFACTS_KEEP` (for example `UPLOADTOOL_STATE_ARTIFACTS_KEEP=5`)
 
+### 2) Build + publish configuration — `release.env`
 
+`release.env` is the **single source of truth** for build and publish configuration (iOS + Android).
 
-### 2) Креды и настройки сборки/публикации — `release.env`
+By default UploadTool reads:
 
-`release.env` — **единый источник правды** для сборки и публикации (iOS + Android).
+- `${UPLOAD_CONFIG_DIR}/release.env` (for example `.uploadtool/release.env`)
 
-По умолчанию UploadTool читает:
-
-- `${UPLOAD_CONFIG_DIR}/release.env` (например, `.uploadtool/release.env`)
-
-Пример со всеми опциями:
+The full example with all options is:
 
 - `config/release.env.example`
 
-### 3) Поведение мастера (опционально) — `wizard.env`
+### 3) Wizard behavior (optional) — `wizard.env`
 
-Файл опционален. Он позволяет:
+This file is optional. It allows you to:
 
-- задать значения по умолчанию (targets/env/upload/wait)
-- пропускать вопросы (удобно для CI или когда каждый релиз «по одному сценарию»)
+- set default values (targets/env/upload/wait)
+- skip questions (handy for CI or when every release follows the same scenario)
 
-Пример:
+Example:
 
 - `config/wizard.env.example`
 
-### Запуск из IDE (VSCode/Android Studio)
+### Running from IDE (VSCode / Android Studio)
 
-Если запускаешь приложение не через мастер, а из IDE, и хочешь использовать то же окружение, добавь в аргументы Flutter:
+If you run the app from an IDE (not via the wizard) and want to use the same environment, add this Flutter argument:
 
 - `--dart-define-from-file=PATH_TO_ENV_JSON`
 
-Где `PATH_TO_ENV_JSON` — это файл `env.json` из твоей директории конфигов:
+Where `PATH_TO_ENV_JSON` is the `env.json` file from your config directory:
 
-- если ты используешь рекомендованный вариант — это обычно `.uploadtool/env.json`
-- если ты запускаешь UploadTool без определённого Flutter‑проекта (нет `pubspec.yaml`) — тогда используется `config/env.json` рядом с `run.sh`
+- if you use the recommended layout — usually `.uploadtool/env.json`
+- if you run UploadTool without a detected Flutter project (`pubspec.yaml` absent) — `config/env.json` next to `run.sh` is used
 
-Если хочешь 1:1 повторить поведение UploadTool для конкретного окружения — используй файл, который мастер подготовил для этого окружения:
+To exactly reproduce UploadTool behavior for a specific environment, use the file the wizard prepared:
 
 - `<config-dir>/state/<env>/dart_defines.json`
 
-### Fastlane (встроенный)
+### Fastlane (embedded)
 
-Fastlane‑конфигурация теперь живёт внутри UploadTool:
+Fastlane configuration lives inside UploadTool:
 
 - `fastlane/Gemfile`
 - `fastlane/fastlane/Fastfile`
 - `fastlane/fastlane/Appfile`
 
-По умолчанию мастер делает `bundle install` именно там. При необходимости можно переопределить:
+By default the wizard runs `bundle install` there. You can override via:
 
 - `UPLOADTOOL_FASTLANE_ROOT=/path/to/fastlane_root`
 
-### Документация по платформам
+### Platform‑specific docs
 
 - iOS TestFlight: `docs/testflight.md`
 - Android Google Play: `docs/google_play.md`

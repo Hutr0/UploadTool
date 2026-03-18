@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-TEST_DESCRIPTION="Smoke: init/setup + запуск через cli.env (дефолтный проект/config-dir)"
+TEST_DESCRIPTION="Smoke: init/setup + run via cli.env (default project/config-dir)"
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPLOAD_TOOL_DIR="$(cd "${TEST_DIR}/.." && pwd)"
@@ -53,11 +53,11 @@ cli_env="${_tmp}/cli.env"
   bash "${_tmp}/UploadTool/run.sh" init --project-root "$project_dir" --cli-env-file "$cli_env" --save-defaults
 ) || _failed=1
 
-assert_dir_exists "${project_dir}/.uploadtool" ".uploadtool должен быть создан" || _failed=1
-assert_file_exists "${project_dir}/.uploadtool/env.json" "env.json должен быть создан" || _failed=1
-assert_file_exists "${project_dir}/.uploadtool/release.env" "release.env должен быть создан" || _failed=1
-assert_file_exists "${project_dir}/.uploadtool/wizard.env" "wizard.env должен быть создан" || _failed=1
-assert_file_exists "$cli_env" "cli.env должен быть создан" || _failed=1
+assert_dir_exists "${project_dir}/.uploadtool" ".uploadtool should be created" || _failed=1
+assert_file_exists "${project_dir}/.uploadtool/env.json" "env.json should be created" || _failed=1
+assert_file_exists "${project_dir}/.uploadtool/release.env" "release.env should be created" || _failed=1
+assert_file_exists "${project_dir}/.uploadtool/wizard.env" "wizard.env should be created" || _failed=1
+assert_file_exists "$cli_env" "cli.env should be created" || _failed=1
 
 # Stub external tools for wizard run
 stub_bin="${_tmp}/stub_bin"
@@ -140,8 +140,8 @@ else
   assert_file_exists "${state_dir}/ios_ipa_path.txt" || _failed=1
   aab_path="$(cat "${state_dir}/android_aab_path.txt" | tr -d '\r\n')"
   ipa_path="$(cat "${state_dir}/ios_ipa_path.txt" | tr -d '\r\n')"
-  assert_file_exists "$aab_path" "AAB artifact должен существовать" || _failed=1
-  assert_file_exists "$ipa_path" "IPA artifact должен существовать" || _failed=1
+  assert_file_exists "$aab_path" "AAB artifact must exist" || _failed=1
+  assert_file_exists "$ipa_path" "IPA artifact must exist" || _failed=1
 fi
 
 rm -rf "${_tmp}"

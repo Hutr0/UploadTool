@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 
-TEST_DESCRIPTION="Workflow: интеграционный тест сборки iOS/Android (flutter аргументы, артефакты)"
+TEST_DESCRIPTION="Workflow: integration test for iOS/Android builds (flutter args, artifacts)"
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPLOAD_TOOL_DIR="$(cd "${TEST_DIR}/.." && pwd)"
 
 # shellcheck disable=SC1090
 source "${UPLOAD_TOOL_DIR}/lib/infra/runner.sh"
+# shellcheck disable=SC1090
+source "${UPLOAD_TOOL_DIR}/lib/i18n/en.sh"
 # shellcheck disable=SC1090
 source "${UPLOAD_TOOL_DIR}/lib/workflow.sh"
 
@@ -64,8 +66,8 @@ uploadtool_run_cmd_override() {
 
   uploadtool_build_android "dev" "${state_dir_android}" || exit 1
   aab_path="$(cat "${state_dir_android}/android_aab_path.txt")"
-  assert_file_exists "$aab_path" "android_aab_path.txt должен указывать на существующий файл" || exit 1
-  assert_file_exists "${UPLOAD_LOG_DIR}/dev_android.log" "должен быть создан лог Android сборки" || exit 1
+  assert_file_exists "$aab_path" "android_aab_path.txt should reference an existing file" || exit 1
+  assert_file_exists "${UPLOAD_LOG_DIR}/dev_android.log" "Android build log should be created" || exit 1
 
   state_dir_ios="${_tmp}/state/dev"
   mkdir -p "${state_dir_ios}"
@@ -73,8 +75,8 @@ uploadtool_run_cmd_override() {
 
   uploadtool_build_ios "dev" "${state_dir_ios}" || exit 1
   ipa_path="$(cat "${state_dir_ios}/ios_ipa_path.txt")"
-  assert_file_exists "$ipa_path" "ios_ipa_path.txt должен указывать на существующий файл" || exit 1
-  assert_file_exists "${UPLOAD_LOG_DIR}/dev_ios.log" "должен быть создан лог iOS сборки" || exit 1
+  assert_file_exists "$ipa_path" "ios_ipa_path.txt should reference an existing file" || exit 1
+  assert_file_exists "${UPLOAD_LOG_DIR}/dev_ios.log" "iOS build log should be created" || exit 1
 )
 rc=$?
 if [[ "$rc" -ne 0 ]]; then

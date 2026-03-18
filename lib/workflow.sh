@@ -41,7 +41,7 @@ uploadtool_build_android() {
   local tag="$1"
   local state_dir="$2"
   local log="$UPLOAD_LOG_DIR/${tag}_android.log"
-  echo "   🤖 [Android] Сборка начата (${tag}). Лог: $log"
+  printf "$MSG_WORKFLOW_ANDROID_BUILD_START\n" "$tag" "$log"
   local cmd=(flutter build appbundle --release --build-number "$ANDROID_BUILD_NUMBER")
   if [[ "${supports_no_pub:-0}" -eq 1 ]]; then cmd+=(--no-pub); fi
   local env_file="${state_dir}/dart_defines.json"
@@ -63,16 +63,15 @@ PY
       rm -f "$_dart_def_tmp"
     fi
   else
-    echo "   ❌ [Android] Нет файла окружения ${env_file}, сборка ${tag} не должна использовать fallback." >&2
+    printf "$MSG_WORKFLOW_ANDROID_ENV_FILE_MISSING\n" "$env_file" "$tag" >&2
     return 1
   fi
   if [[ -n "${BUILD_NAME:-}" ]]; then cmd+=(--build-name "$BUILD_NAME"); fi
   {
-    echo "=== Окружение сборки (проверка dev/prod) ==="
-    echo "${UPLOADTOOL_ENV_JSON_ENV_KEY:-APP_ENV}=$tag"
-    echo "dart_defines_file=$env_file"
-    cat "$env_file" 2>/dev/null || true
-    echo "=== Flutter build ==="
+    echo "$MSG_WORKFLOW_BUILD_ENV_HEADER"
+    printf "$MSG_WORKFLOW_ENV_FILE_POINTER\n" "${UPLOADTOOL_ENV_JSON_ENV_KEY:-APP_ENV}" "$tag" "$env_file"
+    printf "$MSG_WORKFLOW_ENV_FILE_CONTENTS\n" "$(tr -d '\n' < "$env_file" 2>/dev/null || true)"
+    echo "$MSG_WORKFLOW_FLUTTER_BUILD_HEADER"
     uploadtool_run_cmd "${cmd[@]}"
   } >"$log" 2>&1
   local aab
@@ -87,14 +86,14 @@ PY
   cp -f "$aab" "$aab_copy"
   uploadtool_cleanup_state_artifacts "$artifacts_dir" "$tag"
   echo "$aab_copy" > "${state_dir}/android_aab_path.txt"
-  echo "   🤖 [Android] Сборка готова (${tag}): $aab_copy"
+  printf "$MSG_WORKFLOW_ANDROID_BUILD_DONE\n" "$tag" "$aab_copy"
 }
 
 uploadtool_build_ios() {
   local tag="$1"
   local state_dir="$2"
   local log="$UPLOAD_LOG_DIR/${tag}_ios.log"
-  echo "   📱 [iOS] Сборка начата (${tag}). Лог: $log"
+  printf "$MSG_WORKFLOW_IOS_BUILD_START\n" "$tag" "$log"
   local cmd=(flutter build ipa --release)
   if [[ "${supports_no_pub:-0}" -eq 1 ]]; then cmd+=(--no-pub); fi
   local env_file="${state_dir}/dart_defines.json"
@@ -116,17 +115,16 @@ PY
       rm -f "$_dart_def_tmp"
     fi
   else
-    echo "   ❌ [iOS] Нет файла окружения ${env_file}, сборка ${tag} не должна использовать fallback." >&2
+    printf "$MSG_WORKFLOW_IOS_ENV_FILE_MISSING\n" "$env_file" "$tag" >&2
     return 1
   fi
   if [[ -n "${BUILD_NAME:-}" ]]; then cmd+=(--build-name "$BUILD_NAME"); fi
   if [[ -n "${BUILD_NUMBER:-}" ]]; then cmd+=(--build-number "$BUILD_NUMBER"); fi
   {
-    echo "=== Окружение сборки (проверка dev/prod) ==="
-    echo "${UPLOADTOOL_ENV_JSON_ENV_KEY:-APP_ENV}=$tag"
-    echo "dart_defines_file=$env_file"
-    cat "$env_file" 2>/dev/null || true
-    echo "=== Flutter build ==="
+    echo "$MSG_WORKFLOW_BUILD_ENV_HEADER"
+    printf "$MSG_WORKFLOW_ENV_FILE_POINTER\n" "${UPLOADTOOL_ENV_JSON_ENV_KEY:-APP_ENV}" "$tag" "$env_file"
+    printf "$MSG_WORKFLOW_ENV_FILE_CONTENTS\n" "$(tr -d '\n' < "$env_file" 2>/dev/null || true)"
+    echo "$MSG_WORKFLOW_FLUTTER_BUILD_HEADER"
     uploadtool_run_cmd "${cmd[@]}"
   } >"$log" 2>&1
   local ipa
@@ -141,7 +139,7 @@ PY
   cp -f "$ipa" "$ipa_copy"
   uploadtool_cleanup_state_artifacts "$artifacts_dir" "$tag"
   echo "$ipa_copy" > "${state_dir}/ios_ipa_path.txt"
-  echo "   📱 [iOS] Сборка готова (${tag}): $ipa_copy"
+  printf "$MSG_WORKFLOW_IOS_BUILD_DONE\n" "$tag" "$ipa_copy"
 }
 
 uploadtool_wait_for_all_uploads() {
@@ -158,7 +156,7 @@ uploadtool_wait_for_all_uploads() {
     local rc
     rc="$(tr -d '[:space:]' < "$status_file" 2>/dev/null || echo "1")"
     if [[ "$rc" != "0" ]]; then
-      echo "   ❌ Upload завершился с ошибкой (${label}), rc=${rc}"
+      printf "$MSG_WORKFLOW_UPLOAD_STATUS_ERROR\n" "$label" "$rc"
       fail=1
     fi
   done
@@ -180,9 +178,9 @@ uploadtool_run_for_env() {
 
   echo
   if [[ "$env" == "prod" ]]; then
-    echo "🏪 ===== ENV: prod ====="
+    echo "$MSG_WORKFLOW_ENV_HEADER_PROD"
   else
-    echo "🧪 ===== ENV: dev ====="
+    echo "$MSG_WORKFLOW_ENV_HEADER_DEV"
   fi
 
   unset TESTFLIGHT_CHANGELOG PLAY_RELEASE_NOTES
@@ -197,9 +195,9 @@ uploadtool_run_for_env() {
     cp -f "${UPLOADTOOL_CONFIG_DIR}/env.json" "$dart_defines_path"
   fi
   uploadtool_write_env_to_file "$dart_defines_path" "$env" "${UPLOADTOOL_ENV_JSON_ENV_KEY:-}"
-  echo "   📌 Окружение для сборок: ${UPLOADTOOL_ENV_JSON_ENV_KEY:-APP_ENV}=$env, файл: ${state_dir}/dart_defines.json"
+  printf "$MSG_WORKFLOW_ENV_FILE_POINTER\n" "${UPLOADTOOL_ENV_JSON_ENV_KEY:-APP_ENV}" "$env" "${state_dir}/dart_defines.json"
   if [[ -f "${state_dir}/dart_defines.json" ]]; then
-    echo "      Содержимое: $(cat "${state_dir}/dart_defines.json" | tr -d '\n')"
+    printf "$MSG_WORKFLOW_ENV_FILE_CONTENTS\n" "$(tr -d '\n' < "${state_dir}/dart_defines.json" 2>/dev/null || true)"
   fi
 
   if [[ "${BUILD_ANDROID:-0}" -eq 1 ]]; then
@@ -211,12 +209,12 @@ uploadtool_run_for_env() {
     fi
 
     if [[ ! "${ANDROID_BUILD_NUMBER:-}" =~ ^[0-9]+$ ]]; then
-      echo "   ❌ [Android] ANDROID_BUILD_NUMBER должен быть целым числом, получено: '${ANDROID_BUILD_NUMBER:-}'"
+      printf "$MSG_RUN_ERR_ANDROID_BUILD_NUMBER_NAN\n" "${ANDROID_BUILD_NUMBER:-}"
       return 1
     fi
     local android_build_number_dec=$((10#$ANDROID_BUILD_NUMBER))
     if (( android_build_number_dec <= 0 || android_build_number_dec >= 2147483647 )); then
-      echo "   ❌ [Android] ANDROID_BUILD_NUMBER вне диапазона versionCode: ${ANDROID_BUILD_NUMBER} (допустимо 1..2147483646)"
+      printf "$MSG_RUN_ERR_ANDROID_BUILD_NUMBER_RANGE\n" "${ANDROID_BUILD_NUMBER}"
       return 1
     fi
   fi
@@ -289,7 +287,7 @@ uploadtool_build_and_upload_for_env() {
       uploadtool_build_android "$tag" "$state_dir" || exit 1
       if [[ "${UPLOAD_ANDROID:-0}" -eq 1 ]]; then
         aab_path="$(cat "${state_dir}/android_aab_path.txt")"
-        echo "   📤 [Android] Загрузка в Google Play ($tag): $aab_path"
+        printf "$MSG_WORKFLOW_ANDROID_UPLOAD_START\n" "$tag" "$aab_path"
         (
           cd "$fastlane_root"
           set +e
@@ -308,7 +306,7 @@ uploadtool_build_and_upload_for_env() {
       uploadtool_build_ios "$tag" "$state_dir" || exit 1
       if [[ "${UPLOAD_IOS:-0}" -eq 1 ]]; then
         ipa_path="$(cat "${state_dir}/ios_ipa_path.txt")"
-        echo "   📤 [iOS] Загрузка в TestFlight ($tag): $ipa_path"
+        printf "$MSG_WORKFLOW_IOS_UPLOAD_START\n" "$tag" "$ipa_path"
         (
           cd "$fastlane_root"
           set +e
@@ -329,9 +327,9 @@ uploadtool_build_and_upload_for_env() {
 
   if [[ "$fail" -ne 0 ]]; then
     echo
-    echo "   ❌ Сборка не удалась ($tag). Логи:"
-    [[ -f "$UPLOAD_LOG_DIR/${tag}_ios.log" ]] && echo "   ---- iOS ($tag) (последние 60 строк) ----" && tail -n 60 "$UPLOAD_LOG_DIR/${tag}_ios.log" || true
-    [[ -f "$UPLOAD_LOG_DIR/${tag}_android.log" ]] && echo "   ---- Android ($tag) (последние 60 строк) ----" && tail -n 60 "$UPLOAD_LOG_DIR/${tag}_android.log" || true
+    printf "$MSG_WORKFLOW_BUILD_FAILED\n" "$tag"
+    [[ -f "$UPLOAD_LOG_DIR/${tag}_ios.log" ]] && printf "$MSG_WORKFLOW_LOG_SECTION_TAIL\n" "iOS" "$tag" "60" && tail -n 60 "$UPLOAD_LOG_DIR/${tag}_ios.log" || true
+    [[ -f "$UPLOAD_LOG_DIR/${tag}_android.log" ]] && printf "$MSG_WORKFLOW_LOG_SECTION_TAIL\n" "Android" "$tag" "60" && tail -n 60 "$UPLOAD_LOG_DIR/${tag}_android.log" || true
     return 1
   fi
 
@@ -350,9 +348,9 @@ uploadtool_build_and_upload_for_env() {
 
   if ! uploadtool_wait_for_all_uploads; then
     echo
-    echo "   ❌ Загрузка не удалась. Логи:"
-    [[ -f "$UPLOAD_LOG_DIR/${tag}_ios_upload.log" ]] && echo "   ---- iOS upload ($tag) ----" && tail -n 80 "$UPLOAD_LOG_DIR/${tag}_ios_upload.log" || true
-    [[ -f "$UPLOAD_LOG_DIR/${tag}_android_upload.log" ]] && echo "   ---- Android upload ($tag) ----" && tail -n 80 "$UPLOAD_LOG_DIR/${tag}_android_upload.log" || true
+    echo "$MSG_WORKFLOW_UPLOAD_FAILED"
+    [[ -f "$UPLOAD_LOG_DIR/${tag}_ios_upload.log" ]] && printf "$MSG_WORKFLOW_UPLOAD_SECTION_HEADER\n" "iOS" "$tag" && tail -n 80 "$UPLOAD_LOG_DIR/${tag}_ios_upload.log" || true
+    [[ -f "$UPLOAD_LOG_DIR/${tag}_android_upload.log" ]] && printf "$MSG_WORKFLOW_UPLOAD_SECTION_HEADER\n" "Android" "$tag" && tail -n 80 "$UPLOAD_LOG_DIR/${tag}_android_upload.log" || true
     return 1
   fi
 

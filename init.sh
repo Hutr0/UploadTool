@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 UPLOAD_TOOL_DIR="$SCRIPT_DIR"
 
 if [[ ! -d "$UPLOAD_TOOL_DIR/lib" ]]; then
-  echo "❌ Не найдена папка lib рядом с init.sh: $UPLOAD_TOOL_DIR/lib" >&2
+  echo "❌ Could not find lib directory next to init.sh: $UPLOAD_TOOL_DIR/lib" >&2
   exit 1
 fi
 
@@ -129,11 +129,13 @@ PY
 
 source "$UPLOAD_TOOL_DIR/lib/env_json.sh"
 source "$UPLOAD_TOOL_DIR/lib/profiles.sh"
+source "$UPLOAD_TOOL_DIR/lib/i18n.sh"
+uploadtool_i18n_init
 
 echo
-echo "🧰 UploadTool — инициализация проекта (wizard)"
-echo "✨ Сейчас я помогу быстро подготовить конфиги и базовые значения."
-echo "🔐 Секреты (ASC/Google Play) я не спрашиваю — их нужно будет дописать в release.env вручную."
+echo "$MSG_INIT_TITLE"
+echo "$MSG_INIT_SUBTITLE_SETUP"
+echo "$MSG_INIT_SUBTITLE_SECRETS"
 echo
 
 def_project_root=""
@@ -144,20 +146,20 @@ elif [[ -f "$project_candidate/pubspec.yaml" ]]; then
   def_project_root="$project_candidate"
 fi
 
-project_root="$(prompt "📁 Путь к Flutter‑проекту (где pubspec.yaml)" "$def_project_root")"
+project_root="$(prompt "$MSG_INIT_PROMPT_PROJECT_ROOT" "$def_project_root")"
 project_root="$(expand_path "$project_root")"
 
 if [[ -z "$project_root" ]]; then
-  echo "❌ Путь к проекту не задан" >&2
+  echo "$MSG_INIT_ERR_PROJECT_PATH_EMPTY" >&2
   exit 1
 fi
 if [[ ! -d "$project_root" ]]; then
-  echo "❌ Директория проекта не найдена: $project_root" >&2
+  printf "$MSG_INIT_ERR_PROJECT_DIR_NOT_FOUND\n" "$project_root" >&2
   exit 1
 fi
 project_root="$(cd "$project_root" && pwd)"
 if [[ ! -f "$project_root/pubspec.yaml" ]]; then
-  echo "❌ Не найден pubspec.yaml в: $project_root" >&2
+  printf "$MSG_INIT_ERR_PUBSPEC_NOT_FOUND\n" "$project_root" >&2
   exit 1
 fi
 
@@ -167,10 +169,10 @@ if [[ -d "$project_root/.uploadtool" ]]; then
 else
   def_config_dir="$project_root/.uploadtool"
 fi
-config_dir="$(prompt "⚙️  Директория конфигов (обычно .uploadtool рядом с проектом)" "$def_config_dir")"
+config_dir="$(prompt "$MSG_INIT_PROMPT_CONFIG_DIR" "$def_config_dir")"
 config_dir="$(expand_path "$config_dir")"
 if [[ -z "$config_dir" ]]; then
-  echo "❌ Директория конфигов не задана" >&2
+  echo "$MSG_INIT_ERR_CONFIG_DIR_EMPTY" >&2
   exit 1
 fi
 if [[ "$config_dir" != /* ]]; then
@@ -179,16 +181,16 @@ fi
 mkdir -p "$config_dir"
 config_dir="$(cd "$config_dir" && pwd)"
 
-force_overwrite="$(prompt_yes_no "♻️  Перезаписывать существующие env.json/release.env/wizard.env?" "n")"
+force_overwrite="$(prompt_yes_no "$MSG_INIT_PROMPT_FORCE_OVERWRITE" "n")"
 
-save_defaults="$(prompt_yes_no "💾 Создать локальный cli.env (чтобы потом запускать без постоянных --project-root/--config-dir)?" "y")"
+save_defaults="$(prompt_yes_no "$MSG_INIT_PROMPT_SAVE_DEFAULTS" "y")"
 cli_env_file=""
 if [[ "$save_defaults" -eq 1 ]]; then
   def_cli_env="$config_dir/cli.env"
-  cli_env_file="$(prompt "📄 Путь к cli.env" "$def_cli_env")"
+  cli_env_file="$(prompt "$MSG_INIT_PROMPT_CLI_ENV_PATH" "$def_cli_env")"
   cli_env_file="$(expand_path "$cli_env_file")"
   if [[ -z "$cli_env_file" ]]; then
-    echo "❌ cli.env не задан" >&2
+    echo "$MSG_INIT_ERR_CLI_ENV_EMPTY" >&2
     exit 1
   fi
 fi
@@ -196,26 +198,26 @@ fi
 profiles_dir="$(uploadtool_profiles_dir)"
 save_profile="0"
 if [[ -n "$profiles_dir" ]]; then
-  save_profile="$(prompt_yes_no "📦 Сохранить проект в реестр (чтобы можно было выбирать его при запуске UploadTool)?" "y")"
+  save_profile="$(prompt_yes_no "$MSG_INIT_PROMPT_SAVE_PROFILE" "y")"
 else
-  echo "ℹ️  Реестр проектов недоступен (нет HOME и не задан UPLOADTOOL_PROFILES_DIR) — пропускаю сохранение профиля."
+  echo "$MSG_INIT_INFO_PROFILES_UNAVAILABLE"
 fi
 profile_name=""
 set_default_profile="0"
 overwrite_profile="0"
 if [[ "$save_profile" -eq 1 ]]; then
   default_profile_name="$(basename "$project_root")"
-  profile_name="$(prompt "🏷️  Имя проекта (profile)" "$default_profile_name")"
+  profile_name="$(prompt "$MSG_INIT_PROMPT_PROFILE_NAME" "$default_profile_name")"
   profile_name="${profile_name:-$default_profile_name}"
   if uploadtool_profile_exists "$profile_name"; then
-    overwrite_profile="$(prompt_yes_no "⚠️  Профиль '$profile_name' уже существует. Перезаписать?" "n")"
+    overwrite_profile="$(prompt_yes_no "$(printf "$MSG_INIT_PROMPT_PROFILE_OVERWRITE" "$profile_name")" "n")"
     if [[ "$overwrite_profile" -ne 1 ]]; then
       save_profile="0"
     fi
   fi
 
   if [[ "$save_profile" -eq 1 ]]; then
-    set_default_profile="$(prompt_yes_no "⭐ Сделать '$profile_name' проектом по умолчанию?" "y")"
+    set_default_profile="$(prompt_yes_no "$(printf "$MSG_INIT_PROMPT_SET_DEFAULT_PROFILE" "$profile_name")" "y")"
   fi
 fi
 
@@ -223,46 +225,46 @@ def_fastlane_root="$UPLOAD_TOOL_DIR/fastlane"
 if [[ ! -f "$def_fastlane_root/Gemfile" ]]; then
   def_fastlane_root="$project_root/ios"
 fi
-fastlane_root="$(prompt "🧩 Fastlane root (где Gemfile)" "$def_fastlane_root")"
+fastlane_root="$(prompt "$MSG_INIT_PROMPT_FASTLANE_ROOT" "$def_fastlane_root")"
 fastlane_root="$(expand_path "$fastlane_root")"
 
-env_key="$(prompt "🔑 Ключ окружения для env.json" "APP_ENV")"
+env_key="$(prompt "$MSG_INIT_PROMPT_ENV_KEY" "APP_ENV")"
 env_key="${env_key:-APP_ENV}"
 
-app_env="$(prompt "🌍 Окружение приложения (dev/prod)" "prod")"
+app_env="$(prompt "$MSG_INIT_PROMPT_APP_ENV" "prod")"
 
-base_url="$(prompt "🌐 BASE_URL (опционально, можно оставить пустым)" "")"
+base_url="$(prompt "$MSG_INIT_PROMPT_BASE_URL" "")"
 
-ios_app_id="$(prompt "🍎 iOS bundle id (IOS_APP_IDENTIFIER), опционально" "")"
-android_pkg="$(prompt "🤖 Android applicationId (ANDROID_PACKAGE_NAME), опционально" "")"
+ios_app_id="$(prompt "$MSG_INIT_PROMPT_IOS_APP_ID" "")"
+android_pkg="$(prompt "$MSG_INIT_PROMPT_ANDROID_PKG" "")"
 
 echo
-echo "📋 Итоговые значения:"
-echo "   📁 Project:  $project_root"
-echo "   ⚙️  Config:   $config_dir"
-echo "   🧩 Fastlane: $fastlane_root"
-echo "   🔑 env.json: $env_key=$app_env"
-[[ -n "$base_url" ]] && echo "   🌐 env.json: BASE_URL=$base_url"
-[[ -n "$ios_app_id" ]] && echo "   🍎 release.env: IOS_APP_IDENTIFIER=$ios_app_id"
-[[ -n "$android_pkg" ]] && echo "   🤖 release.env: ANDROID_PACKAGE_NAME=$android_pkg"
+echo "$MSG_INIT_SUMMARY_TITLE"
+printf "$MSG_INIT_SUMMARY_PROJECT\n" "$project_root"
+printf "$MSG_INIT_SUMMARY_CONFIG\n" "$config_dir"
+printf "$MSG_INIT_SUMMARY_FASTLANE\n" "$fastlane_root"
+printf "$MSG_INIT_SUMMARY_ENV_KEY\n" "$env_key" "$app_env"
+[[ -n "$base_url" ]] && printf "$MSG_INIT_SUMMARY_BASE_URL\n" "$base_url"
+[[ -n "$ios_app_id" ]] && printf "$MSG_INIT_SUMMARY_IOS_APP_ID\n" "$ios_app_id"
+[[ -n "$android_pkg" ]] && printf "$MSG_INIT_SUMMARY_ANDROID_PKG\n" "$android_pkg"
 if [[ "$save_defaults" -eq 1 ]]; then
-  echo "   💾 cli.env: $cli_env_file"
+  printf "$MSG_INIT_SUMMARY_CLI_ENV\n" "$cli_env_file"
 fi
 if [[ "$save_profile" -eq 1 ]]; then
-  echo "   📦 profile: $profile_name"
+  printf "$MSG_INIT_SUMMARY_PROFILE\n" "$profile_name"
   if [[ "$set_default_profile" -eq 1 ]]; then
-    echo "   ⭐ default project: $profile_name"
+    printf "$MSG_INIT_SUMMARY_DEFAULT_PROFILE\n" "$profile_name"
   fi
 fi
 
-ok="$(prompt_yes_no "🚀 Продолжить инициализацию?" "y")"
+ok="$(prompt_yes_no "$MSG_INIT_PROMPT_CONFIRM_INIT" "y")"
 if [[ "$ok" -ne 1 ]]; then
-  echo "Остановлено." >&2
+  echo "$MSG_INIT_ABORTED" >&2
   exit 1
 fi
 
 echo
-echo "🚀 Выполняю init..."
+echo "$MSG_INIT_RUNNING"
 
 args=("init" "--project-root" "$project_root" "--config-dir" "$config_dir" "--fastlane-root" "$fastlane_root" "--env-key" "$env_key")
 if [[ "$force_overwrite" -eq 1 ]]; then
@@ -301,31 +303,32 @@ if [[ -n "$android_pkg" ]]; then
 fi
 
 echo
-echo "✅ Готово"
-echo "   - $config_dir/env.json"
-echo "   - $config_dir/release.env"
-echo "   - $config_dir/wizard.env"
+echo "$MSG_INIT_DONE_TITLE"
+echo "$MSG_INIT_DONE_FILES_HEADER"
+printf "$MSG_INIT_DONE_ENV_JSON\n" "$config_dir"
+printf "$MSG_INIT_DONE_RELEASE_ENV\n" "$config_dir"
+printf "$MSG_INIT_DONE_WIZARD_ENV\n" "$config_dir"
 
 if [[ "$save_defaults" -eq 1 ]]; then
-  echo "   - $cli_env_file"
+  printf "$MSG_INIT_DONE_CLI_ENV\n" "$cli_env_file"
 fi
 
 if [[ "$save_profile" -eq 1 ]]; then
   profiles_dir="$(uploadtool_profiles_dir)"
   if [[ -n "$profiles_dir" ]]; then
-    echo "   - $profiles_dir/$profile_name.env"
+    printf "$MSG_INIT_DONE_PROFILE_FILE\n" "$profiles_dir" "$profile_name"
   fi
 fi
 
 echo
-echo "Дальше:"
-echo "1) 🔐 Заполни секреты в $config_dir/release.env"
-echo "2) 🧙 Запусти мастер релиза:"
+echo "$MSG_INIT_NEXT_STEPS_TITLE"
+printf "$MSG_INIT_NEXT_FILL_SECRETS\n" "$config_dir"
+echo "2) 🧙"
 if [[ "$save_profile" -eq 1 ]]; then
-  echo "   bash $UPLOAD_TOOL_DIR/run.sh --project $profile_name"
+  printf "$MSG_INIT_NEXT_RUN_WIZARD_FROM_PROFILE\n" "$UPLOAD_TOOL_DIR" "$profile_name"
 elif [[ "$save_defaults" -eq 1 ]]; then
-  echo "   bash $UPLOAD_TOOL_DIR/run.sh --cli-env-file $cli_env_file"
+  printf "$MSG_INIT_NEXT_RUN_WIZARD_FROM_CLI_ENV\n" "$UPLOAD_TOOL_DIR" "$cli_env_file"
 else
-  echo "   bash $UPLOAD_TOOL_DIR/run.sh --project-root $project_root --config-dir $config_dir"
+  printf "$MSG_INIT_NEXT_RUN_WIZARD_FROM_PATHS\n" "$UPLOAD_TOOL_DIR" "$project_root" "$config_dir"
 fi
 echo

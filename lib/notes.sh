@@ -6,9 +6,9 @@ uploadtool_build_release_notes() {
 
   local header
   if [[ "$env" == "prod" ]]; then
-    header="Релизная сборка"
+    header="$MSG_NOTES_HEADER_PROD"
   else
-    header="Тестовая сборка"
+    header="$MSG_NOTES_HEADER_DEV"
   fi
 
   if [[ -n "${changelog// /}" ]]; then
