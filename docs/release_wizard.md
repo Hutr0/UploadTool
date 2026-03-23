@@ -143,10 +143,14 @@ This file is optional. It allows you to:
 
 - set default values (targets/env/upload/wait)
 - skip questions (handy for CI or when every release follows the same scenario)
+- force sequential Android uploads in `dev + prod` mode to avoid Google Play edit conflicts
 
 Example:
 
 - `config/wizard.env.example`
+
+Important for Android: when `dev + prod` and Android upload are enabled, UploadTool uses sequential Android uploads by default to avoid `This Edit has been deleted` errors from Google Play Edits API.
+This is controlled by `WIZARD_FORCE_SEQUENTIAL_ANDROID_UPLOAD` (`1` by default, set `0` to allow parallel uploads).
 
 ### Running from IDE (VSCode / Android Studio)
 

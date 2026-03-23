@@ -29,6 +29,43 @@ def uploadtool_config_dir(repo_root)
   ""
 end
 
+def uploadtool_upload_to_play_store_with_retry(options)
+  # Default is 2 attempts total (1 initial + 1 retry).
+  # Can be tuned via env, e.g. PLAY_UPLOAD_RETRY_ATTEMPTS=3.
+  configured_attempts = ENV["PLAY_UPLOAD_RETRY_ATTEMPTS"].to_s.strip
+  attempts = 0
+  max_attempts = configured_attempts.match?(/^\d+$/) ? configured_attempts.to_i : 2
+  max_attempts = 1 if max_attempts < 1
+
+  begin
+    attempts += 1
+    upload_to_play_store(**options)
+  rescue => e
+    # Keep detection resilient to message wording differences across fastlane/Google APIs.
+    all_messages = []
+    current_error = e
+    5.times do
+      break if current_error.nil?
+      all_messages << current_error.to_s
+      all_messages << current_error.message.to_s
+      current_error = current_error.respond_to?(:cause) ? current_error.cause : nil
+    end
+    message_blob = all_messages.join("\n").downcase
+
+    retriable =
+      message_blob.include?("this edit has been deleted") ||
+      message_blob.include?("edit has been deleted") ||
+      (message_blob.include?("google api error") && message_blob.include?("edit") && message_blob.include?("deleted"))
+
+    if retriable && attempts < max_attempts
+      UI.important("Google Play edit invalidated, retrying upload_to_play_store (attempt #{attempts + 1}/#{max_attempts})...")
+      sleep([3 * attempts, 10].min)
+      retry
+    end
+    raise
+  end
+end
+
 platform :ios do
   desc "Build Flutter IPA and upload to TestFlight (API key or Apple ID)"
   lane :upload_testflight do |options|
@@ -239,7 +276,7 @@ platform :android do
         FileUtils.mkdir_p(changelog_dir)
         File.write(File.join(changelog_dir, "#{android_build_number}.txt"), release_notes)
 
-        upload_to_play_store(
+        uploadtool_upload_to_play_store_with_retry(
           json_key: json_key_path,
           package_name: package_name,
           aab: aab_path,
@@ -257,7 +294,7 @@ platform :android do
       next
     end
 
-    upload_to_play_store(
+    uploadtool_upload_to_play_store_with_retry(
       json_key: json_key_path,
       package_name: package_name,
       aab: aab_path,

@@ -211,6 +211,15 @@ At startup UploadTool prints the chosen fastlane path:
 Fastlane:/path/to/some/fastlane
 ```
 
+Update fastlane in UploadTool:
+
+```bash
+cd /path/to/UploadTool/fastlane && bundle update fastlane && bundle install
+```
+
+For `dev + prod` with Android upload, UploadTool now forces sequential Android uploads by default to avoid Google Play edit conflicts (`This Edit has been deleted`).
+You can control this behavior via `WIZARD_FORCE_SEQUENTIAL_ANDROID_UPLOAD` in `wizard.env` (`1` = sequential, `0` = allow parallel).
+
 ### Localization (i18n)
 
 UploadTool supports localized CLI messages (wizards in `run.sh` and `init.sh`):

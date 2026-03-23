@@ -939,17 +939,28 @@ run_for_env() {
 UPLOAD_OR_BUILD_FAILED=0
 
 if [[ "$ENV_TARGETS" == "both" ]]; then
-  # Sequential dev/prod builds keep build/ artifacts isolated; uploads run asynchronously and sync later.
-  run_for_env "dev" "$DEV_BUILD_NUMBER" 1 || exit 1
-  run_for_env "prod" "$PROD_BUILD_NUMBER" 1 || exit 1
-  if ! wait_for_all_uploads; then
-    UPLOAD_OR_BUILD_FAILED=1
-    echo
-    echo "$MSG_RUN_ERR_UPLOADS_PARTIALLY_FAILED"
-    [[ -f "$UPLOAD_LOG_DIR/dev_ios_upload.log" ]] && echo "   ---- iOS (dev) ----" && tail -n 80 "$UPLOAD_LOG_DIR/dev_ios_upload.log" || true
-    [[ -f "$UPLOAD_LOG_DIR/dev_android_upload.log" ]] && echo "   ---- Android (dev) ----" && tail -n 80 "$UPLOAD_LOG_DIR/dev_android_upload.log" || true
-    [[ -f "$UPLOAD_LOG_DIR/prod_ios_upload.log" ]] && echo "   ---- iOS (prod) ----" && tail -n 80 "$UPLOAD_LOG_DIR/prod_ios_upload.log" || true
-    [[ -f "$UPLOAD_LOG_DIR/prod_android_upload.log" ]] && echo "   ---- Android (prod) ----" && tail -n 80 "$UPLOAD_LOG_DIR/prod_android_upload.log" || true
+  async_upload_mode=1
+  force_sequential_android_upload="${WIZARD_FORCE_SEQUENTIAL_ANDROID_UPLOAD:-1}"
+  if [[ "$UPLOAD_ANDROID" -eq 1 && "$force_sequential_android_upload" != "0" ]]; then
+    # Google Play Edits API can invalidate one edit when two uploads for the same app
+    # happen in parallel ("This Edit has been deleted"), so serialize dev/prod uploads.
+    async_upload_mode=0
+  fi
+
+  # Sequential dev/prod builds keep build/artifacts isolated.
+  run_for_env "dev" "$DEV_BUILD_NUMBER" "$async_upload_mode" || exit 1
+  run_for_env "prod" "$PROD_BUILD_NUMBER" "$async_upload_mode" || exit 1
+
+  if [[ "$async_upload_mode" -eq 1 ]]; then
+    if ! wait_for_all_uploads; then
+      UPLOAD_OR_BUILD_FAILED=1
+      echo
+      echo "$MSG_RUN_ERR_UPLOADS_PARTIALLY_FAILED"
+      [[ -f "$UPLOAD_LOG_DIR/dev_ios_upload.log" ]] && echo "   ---- iOS (dev) ----" && tail -n 80 "$UPLOAD_LOG_DIR/dev_ios_upload.log" || true
+      [[ -f "$UPLOAD_LOG_DIR/dev_android_upload.log" ]] && echo "   ---- Android (dev) ----" && tail -n 80 "$UPLOAD_LOG_DIR/dev_android_upload.log" || true
+      [[ -f "$UPLOAD_LOG_DIR/prod_ios_upload.log" ]] && echo "   ---- iOS (prod) ----" && tail -n 80 "$UPLOAD_LOG_DIR/prod_ios_upload.log" || true
+      [[ -f "$UPLOAD_LOG_DIR/prod_android_upload.log" ]] && echo "   ---- Android (prod) ----" && tail -n 80 "$UPLOAD_LOG_DIR/prod_android_upload.log" || true
+    fi
   fi
 else
   if ! run_for_env "$ENV_TARGETS" "$DEV_BUILD_NUMBER"; then

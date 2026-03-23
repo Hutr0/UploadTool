@@ -171,6 +171,9 @@ For builds the wizard creates a per‑env dart‑defines file:
 
 It is formed by copying `<config-dir>/env.json` and then updating the environment key (`APP_ENV` / `CHOYS_ENV` / key from `UPLOADTOOL_ENV_JSON_ENV_KEY`).
 
+For Android in `dev + prod` mode, UploadTool can force sequential uploads to avoid Google Play `This Edit has been deleted` errors.
+This is controlled by `WIZARD_FORCE_SEQUENTIAL_ANDROID_UPLOAD` in `wizard.env` (`1` by default).
+
 Artifacts are copied to:
 
 - `<config-dir>/state/<env>/artifacts/`

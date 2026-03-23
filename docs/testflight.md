@@ -172,6 +172,12 @@ Fastlane logic:
 - runs `flutter build ipa --release` (unless `SKIP_FLUTTER_BUILD=1` is set)
 - uploads `build/ios/ipa/*.ipa` to TestFlight
 
+Fastlane update command (from UploadTool repository):
+
+```bash
+cd /path/to/UploadTool/fastlane && bundle update fastlane && bundle install
+```
+
 ### Troubleshooting
 
 #### `error: exportArchive Copy failed` / `rsync` issues

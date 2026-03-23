@@ -113,6 +113,11 @@ If `dev + prod` is selected, the wizard performs two uploads in sequence:
 - Build number format: `YYYYMMDD.N.X`, with `X = 0` for dev and `X = 1` for prod.
 - Example: dev `20260220.1.0` → prod `20260220.2.1` (core increments, suffix switches to `.1`).
 
+Android upload behavior in `dev + prod`:
+
+- by default UploadTool forces sequential Android uploads (`WIZARD_FORCE_SEQUENTIAL_ANDROID_UPLOAD=1`) to avoid Google Play Edits API conflict `This Edit has been deleted`
+- you can set `WIZARD_FORCE_SEQUENTIAL_ANDROID_UPLOAD=0` in `wizard.env` if you explicitly want parallel mode
+
 ### State directory and artifacts retention
 
 Each `.aab` is copied to:

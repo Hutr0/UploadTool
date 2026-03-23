@@ -36,3 +36,7 @@ If applicable, add screenshots to help explain your problem.
 
 **Additional context**
 Add any other context about the problem here.
+
+**UploadTool diagnostics (if release issue)**
+- Attach relevant logs from `.uploadtool/logs/`
+- Mention if the run was `dev`, `prod`, or `dev + prod`
