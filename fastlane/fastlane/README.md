@@ -36,8 +36,6 @@ Build Flutter IPA and upload to TestFlight (API key or Apple ID)
 
 Build Android AAB and upload to Google Play (supply)
 
-Google Play upload includes retry handling for transient edit invalidation errors (`This Edit has been deleted`).
-
 ----
 
 This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.

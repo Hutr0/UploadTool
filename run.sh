@@ -865,9 +865,9 @@ uploadtool_fastlane_ensure_session() {
     return 1
   fi
 
-  # Parse the exact export FASTLANE_SESSION line from spaceauth output.
+  # Parse FASTLANE_SESSION from spaceauth output (may be prefixed by script(1) / fastlane timestamps).
   local env_line
-  env_line="$(grep 'export FASTLANE_SESSION=' "$tmp_log" | tail -n 1 || true)"
+  env_line="$(grep 'FASTLANE_SESSION=' "$tmp_log" | tail -n 1 || true)"
   rm -f "$tmp_log"
 
   if [[ -z "$env_line" ]]; then
@@ -876,9 +876,14 @@ uploadtool_fastlane_ensure_session() {
     return 0
   fi
 
-  # Remove leading spaces/export prefix; trim trailing commands.
-  env_line="$(echo "$env_line" | sed -E 's/^[[:space:]]*export[[:space:]]+//')"
+  # Keep only the assignment starting at FASTLANE_SESSION= (handles "export ..." and "[timestamp]: ...").
+  if [[ "$env_line" == *FASTLANE_SESSION=* ]]; then
+    env_line="${env_line#*FASTLANE_SESSION=}"
+    env_line="FASTLANE_SESSION=${env_line}"
+  fi
   env_line="${env_line%%;*}"
+  env_line="${env_line#"${env_line%%[![:space:]]*}"}"
+  env_line="${env_line%"${env_line##*[![:space:]]}"}"
 
   if [[ "$env_line" != FASTLANE_SESSION=* ]]; then
     echo "$MSG_RUN_ERR_SPACEAUTH_UNEXPECTED_SESSION_FORMAT" >&2

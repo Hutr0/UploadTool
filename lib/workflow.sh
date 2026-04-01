@@ -1,5 +1,57 @@
 #!/usr/bin/env bash
 
+# Drops stale iOS build outputs so --build-name / --build-number always regenerate
+# FLUTTER_BUILD_* (avoids TestFlight uploads with an old CFBundleVersion from pubspec).
+uploadtool_prepare_ios_flutter_build() {
+  local root="${ROOT_DIR:-}"
+  [[ -n "$root" ]] || return 0
+  if [[ "${UPLOADTOOL_IOS_CLEAN_BUILD:-1}" == "0" ]]; then
+    return 0
+  fi
+  rm -rf "${root}/build/ios"
+  rm -f "${root}/ios/Flutter/Generated.xcconfig" "${root}/ios/Flutter/flutter_export_environment.sh"
+}
+
+# Prints CFBundleVersion from the main app Info.plist inside an IPA (stdout). Exit codes:
+# 0 — ok, 1 — archive/plist error (should fail the build), 2 — not a zip / skip check (e.g. tests).
+uploadtool_read_ipa_cfbundle_version() {
+  local ipa="$1"
+  python3 - <<'PY' "$ipa"
+import plistlib, sys, zipfile
+
+ipa = sys.argv[1]
+try:
+    zf = zipfile.ZipFile(ipa, "r")
+except zipfile.BadZipFile:
+    sys.exit(2)
+except OSError:
+    sys.exit(2)
+with zf:
+    main_plist = None
+    for name in zf.namelist():
+        parts = name.split("/")
+        if (
+            len(parts) == 3
+            and parts[0] == "Payload"
+            and parts[1].endswith(".app")
+            and parts[2] == "Info.plist"
+        ):
+            main_plist = name
+            break
+    if not main_plist:
+        sys.exit(1)
+    raw = zf.read(main_plist)
+try:
+    data = plistlib.loads(raw)
+except Exception:
+    sys.exit(1)
+ver = data.get("CFBundleVersion")
+if ver is None or str(ver).strip() == "":
+    sys.exit(1)
+print(str(ver).strip())
+PY
+}
+
 uploadtool_cleanup_state_artifacts() {
   local artifacts_dir="$1"
   local tag="$2"
@@ -94,6 +146,7 @@ uploadtool_build_ios() {
   local state_dir="$2"
   local log="$UPLOAD_LOG_DIR/${tag}_ios.log"
   printf "$MSG_WORKFLOW_IOS_BUILD_START\n" "$tag" "$log"
+  uploadtool_prepare_ios_flutter_build
   local cmd=(flutter build ipa --release)
   if [[ "${supports_no_pub:-0}" -eq 1 ]]; then cmd+=(--no-pub); fi
   local env_file="${state_dir}/dart_defines.json"
@@ -137,6 +190,26 @@ PY
   mkdir -p "$artifacts_dir"
   local ipa_copy="${artifacts_dir}/app-${tag}-${BUILD_NUMBER}.ipa"
   cp -f "$ipa" "$ipa_copy"
+  if [[ "${UPLOADTOOL_VERIFY_IPA_BUNDLE_VERSION:-1}" != "0" && -n "${BUILD_NUMBER:-}" ]]; then
+    local actual=""
+    local vrc=0
+    actual="$(uploadtool_read_ipa_cfbundle_version "$ipa_copy")" || vrc=$?
+    if [[ "$vrc" -eq 0 ]]; then
+      if [[ "$actual" != "$BUILD_NUMBER" ]]; then
+        {
+          printf '%s\n' "$MSG_WORKFLOW_IOS_IPA_BUNDLE_MISMATCH"
+          printf "$MSG_WORKFLOW_IOS_IPA_BUNDLE_MISMATCH_DETAIL\n" "$BUILD_NUMBER" "$actual" "$ipa_copy"
+          printf '%s\n' "$MSG_WORKFLOW_IOS_IPA_BUNDLE_MISMATCH_HINT"
+        } | tee -a "$log" >&2
+        return 1
+      fi
+    elif [[ "$vrc" -eq 2 ]]; then
+      printf '%s\n' "$MSG_WORKFLOW_IOS_IPA_BUNDLE_CHECK_SKIPPED" >>"$log"
+    else
+      printf '%s\n' "$MSG_WORKFLOW_IOS_IPA_BUNDLE_READ_ERR" | tee -a "$log" >&2
+      return 1
+    fi
+  fi
   uploadtool_cleanup_state_artifacts "$artifacts_dir" "$tag"
   echo "$ipa_copy" > "${state_dir}/ios_ipa_path.txt"
   printf "$MSG_WORKFLOW_IOS_BUILD_DONE\n" "$tag" "$ipa_copy"
